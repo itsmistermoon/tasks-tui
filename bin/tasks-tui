@@ -1,0 +1,5 @@
+#!/bin/sh
+TASKS_TUI_ENTRY="$0"
+if [ -L "$TASKS_TUI_ENTRY" ]; then TASKS_TUI_ENTRY="$(readlink "$TASKS_TUI_ENTRY")"; fi
+TASKS_TUI_DIR="$(CDPATH= cd -- "$(dirname -- "$TASKS_TUI_ENTRY")/.." && pwd)"
+exec bun "$TASKS_TUI_DIR/opentui/app.ts" "$@"

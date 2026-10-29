@@ -1,0 +1,4 @@
+github.com/pelletier/go-toml/v2 v2.4.3 h1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdDPYVpY=
+github.com/pelletier/go-toml/v2 v2.4.3/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
+github.com/toon-format/toon-go v1.0.1 h1:DKeh/TlHh6EmYHPcQW3ovQKZXF1zrM0lSjG6cVOPido=
+github.com/toon-format/toon-go v1.0.1/go.mod h1:j/BOnpF2ihnz4lELs99h9mwGJBx/zdleOUCnLLRPCsc=

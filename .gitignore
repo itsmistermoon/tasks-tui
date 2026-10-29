@@ -1,0 +1,3 @@
+node_modules/
+bin/tasks-backend
+.DS_Store

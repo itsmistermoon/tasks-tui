@@ -1052,13 +1052,19 @@ async function refresh() {
     }
     const changed = JSON.stringify(data) !== JSON.stringify(next);
     data = next;
+    let taskLookupChanged = false;
     if (taskLookupPending) {
-      taskLookupPending = false;
       const task = resolveTask(data.tasks, cli.taskId);
-      if (task) openTask(task);
-      else taskLookupWarning = `Task id "${cli.taskId}" was not found; showing the task list.`;
+      if (task) {
+        taskLookupPending = false;
+        openTask(task);
+      } else if (data.failed.length === 0) {
+        taskLookupPending = false;
+        taskLookupWarning = `Task id "${cli.taskId}" was not found; showing the task list.`;
+        taskLookupChanged = true;
+      }
     }
-    if (changed && focus !== "search" && mode !== "add" && mode !== "help")
+    if ((changed || taskLookupChanged) && focus !== "search" && mode !== "add" && mode !== "help")
       render();
   } catch (e) {
     if (renderer.isDestroyed) return;

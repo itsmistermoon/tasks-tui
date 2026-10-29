@@ -31,11 +31,12 @@ Start the viewer from the project directory:
 ./bin/tasks-tui
 ```
 
-You can also pass one or more backlog files or project directories:
+You can also pass one or more backlog files or project directories. Use `--task <id>` to open a task directly; if the id is not found, the viewer displays a warning and opens the task list.
 
-```sh
-./bin/tasks-tui ~/projects/studio/data/backlog.md ~/projects/platform
-```
+| Usage | Description |
+| --- | --- |
+| `./bin/tasks-tui [backlog.md | directory ...]` | Open the task list using discovered and specified sources |
+| `./bin/tasks-tui --task <id> [backlog.md | directory ...]` | Open the matching task detail, using the specified sources |
 
 Press `?` for help, `b` to browse sources and filters, or `/` to search.
 

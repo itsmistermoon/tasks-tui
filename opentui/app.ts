@@ -23,6 +23,7 @@ import { matchesDependency } from "./dependencies";
 import { truncateText } from "./truncate";
 import { SnapshotClient } from "./snapshot-client";
 import { helpContent } from "./help";
+import { parseArgs, resolveTask } from "./cli";
 import {
   icons,
   status,
@@ -40,9 +41,10 @@ import {
   selectionBackground,
 } from "./panel-theme";
 
+const cli = parseArgs(process.argv.slice(2));
 if (process.argv.slice(2).some((x) => x === "--help" || x === "-h")) {
   console.log(
-    "Usage: tasks-tui [backlog.md | directory ...]\nRead-only task viewer using OpenTUI. Press ? for help.",
+    "Usage: tasks-tui [--task <id>] [backlog.md | directory ...]\nRead-only task viewer using OpenTUI. Press ? for help.",
   );
   process.exit(0);
 }
@@ -138,6 +140,7 @@ let data: Snapshot = { tasks: [], sources: [], errors: [], failed: [] },
   searchTimer: ReturnType<typeof setTimeout> | undefined,
   stickyText: TextRenderable | null = null,
   sections: { id: string; name: string }[] = [];
+let taskLookupPending = !!cli.taskId, taskLookupWarning = "";
 const text = (
   id: string,
   content: string,
@@ -402,6 +405,8 @@ function render() {
     }
     return;
   }
+  if (taskLookupWarning)
+    frame.add(line("task-lookup-warning", taskLookupWarning, RGBA.fromIndex(3)));
   if (data.errors.length)
     frame.add(
       line("live", "● STALE  " + data.errors.join(" · "), RGBA.fromIndex(9)),
@@ -1026,7 +1031,7 @@ function updateSticky() {
       stickyText.content = v;
   }
 }
-const snapshots = new SnapshotClient(backend, process.argv.slice(2));
+const snapshots = new SnapshotClient(backend, cli.sources);
 async function refresh() {
   if (loading) return;
   loading = true;
@@ -1047,7 +1052,19 @@ async function refresh() {
     }
     const changed = JSON.stringify(data) !== JSON.stringify(next);
     data = next;
-    if (changed && focus !== "search" && mode !== "add" && mode !== "help")
+    let taskLookupChanged = false;
+    if (taskLookupPending) {
+      const task = resolveTask(data.tasks, cli.taskId);
+      if (task) {
+        taskLookupPending = false;
+        openTask(task);
+      } else if (data.failed.length === 0) {
+        taskLookupPending = false;
+        taskLookupWarning = `Task id "${cli.taskId}" was not found; showing the task list.`;
+        taskLookupChanged = true;
+      }
+    }
+    if ((changed || taskLookupChanged) && focus !== "search" && mode !== "add" && mode !== "help")
       render();
   } catch (e) {
     if (renderer.isDestroyed) return;

@@ -31,16 +31,7 @@ func (session *snapshotSession) snapshot(args []string, output io.Writer) error 
 	}
 	seen := map[string]bool{}
 	r := snapshotResult{Tasks: []Task{}, Errors: []string{}, Sources: []string{}, Failed: []string{}}
-	paths := []string{}
-	if os.Getenv("TASKS_AXI_FILE") != "" {
-		paths = append(paths, resolveSource(os.Getenv("TASKS_AXI_FILE")))
-	} else if len(args) > 0 {
-		paths = append(paths, c.Sources...)
-	} else {
-		paths = append(paths, c.Sources...)
-		paths = append(paths, discover(cwd)...)
-	}
-	paths = append(paths, args...)
+	paths := append(append(c.Sources, discover(cwd)...), args...)
 	for path := range session.known {
 		if _, err := os.Stat(path); err != nil {
 			paths = append(paths, path)

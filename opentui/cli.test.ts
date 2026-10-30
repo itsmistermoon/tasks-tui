@@ -12,26 +12,7 @@ const task = (id: string): Task => ({
 test("parses task id alongside backlog sources", () => {
   expect(parseArgs(["--task", "T-12", "backlog.md", "~/project"])).toEqual({
     taskId: "T-12",
-    count: false,
-    json: false,
     sources: ["backlog.md", "~/project"],
-  });
-});
-
-test("parses count output and requires count for JSON", () => {
-  expect(parseArgs(["--count", "--json", "backlog.md"])).toEqual({
-    count: true,
-    json: true,
-    sources: ["backlog.md"],
-  });
-  expect(() => parseArgs(["--json"])).toThrow("--json requires --count");
-});
-
-test("count command arguments preserve source and output mode", () => {
-  expect(parseArgs(["--count", "--json", "/one/backlog.md"])).toEqual({
-    count: true,
-    json: true,
-    sources: ["/one/backlog.md"],
   });
 });
 

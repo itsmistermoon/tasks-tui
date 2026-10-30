@@ -79,7 +79,14 @@ func TestDiscoverUsesTasksAxiFile(t *testing.T) {
 	t.Setenv("TASKS_AXI_FILE", p)
 	got := discover(filepath.Join(d, "elsewhere"))
 	resolved, err := filepath.EvalSymlinks(p)
-	if err != nil || len(got) != 1 || filepath.Clean(got[0]) != filepath.Clean(resolved) {
+	found := false
+	for _, source := range got {
+		if filepath.Clean(source) == filepath.Clean(resolved) {
+			found = true
+			break
+		}
+	}
+	if err != nil || !found {
 		t.Fatalf("TASKS_AXI_FILE source not discovered: %#v", got)
 	}
 }

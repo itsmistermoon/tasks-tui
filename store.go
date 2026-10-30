@@ -207,11 +207,7 @@ func discover(cwd string) []string {
 	} else {
 		add(cwd)
 	}
-	roots := []string{cwd}
-	if os.Getenv("TASKS_AXI_FILE") == "" {
-		roots = append(roots, filepath.Join(userHome(), ".treehouse"), filepath.Join(userHome(), ".fm"), filepath.Join(userHome(), "projects"))
-	}
-	for _, root := range roots {
+	for _, root := range []string{cwd, filepath.Join(userHome(), ".treehouse"), filepath.Join(userHome(), ".fm"), filepath.Join(userHome(), "projects")} {
 		filepath.WalkDir(root, func(p string, d os.DirEntry, e error) error {
 			if e != nil {
 				return nil

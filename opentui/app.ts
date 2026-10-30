@@ -29,6 +29,7 @@ import {
   status,
   sourceName,
   filterTasks,
+  taskStatuses,
   type Task,
   type Snapshot,
 } from "./tasks";
@@ -161,6 +162,9 @@ function listTasks() {
   if (!visible.some((task) => task.Key === selected))
     selected = visible[0]?.Key || "";
 }
+function visibleTaskTotal() {
+  return countTasks(data.tasks).total;
+}
 function nav() {
   navItems = [
     { label: "all backlogs", source: "", group: "", section: "sources" },
@@ -169,7 +173,7 @@ function nav() {
       source: p,
       group: "",
     })),
-    ...["In progress", "Queued", "Blocked", "Held", "Done", "Archived"].map(
+    ...taskStatuses.map(
       (v, i) => ({
         label: `${icons[v]} ${v.toLowerCase()}`,
         source,
@@ -887,7 +891,7 @@ function renderTaskList(p: BoxRenderable, oldScroll: number) {
       "panel-heading",
       (source ? sourceName(source) : "all backlogs") +
         " · " +
-        visible.length +
+        (source || group || query ? visible.length : visibleTaskTotal()) +
         " tasks",
       activeBorder,
     ),

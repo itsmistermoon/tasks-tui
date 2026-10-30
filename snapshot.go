@@ -3,8 +3,10 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -29,7 +31,16 @@ func (session *snapshotSession) snapshot(args []string, output io.Writer) error 
 	}
 	seen := map[string]bool{}
 	r := snapshotResult{Tasks: []Task{}, Errors: []string{}, Sources: []string{}, Failed: []string{}}
-	paths := append(append(c.Sources, discover(cwd)...), args...)
+	paths := []string{}
+	if os.Getenv("TASKS_AXI_FILE") != "" {
+		paths = append(paths, resolveSource(os.Getenv("TASKS_AXI_FILE")))
+	} else if len(args) > 0 {
+		paths = append(paths, c.Sources...)
+	} else {
+		paths = append(paths, c.Sources...)
+		paths = append(paths, discover(cwd)...)
+	}
+	paths = append(paths, args...)
 	for path := range session.known {
 		if _, err := os.Stat(path); err != nil {
 			paths = append(paths, path)
@@ -69,6 +80,50 @@ func serveSnapshots(args []string) error {
 		}
 	}
 	return scanner.Err()
+}
+
+func printCounts(args []string, output io.Writer) error {
+	jsonOutput := false
+	sources := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg == "--json" {
+			jsonOutput = true
+		} else {
+			sources = append(sources, arg)
+		}
+	}
+	session := snapshotSession{store: Store{cache: map[string]sourceCache{}}, known: map[string]bool{}}
+	var line strings.Builder
+	if err := session.snapshot(sources, &line); err != nil {
+		return err
+	}
+	var snapshot snapshotResult
+	if err := json.Unmarshal([]byte(line.String()), &snapshot); err != nil {
+		return err
+	}
+	for _, failure := range snapshot.Errors {
+		return fmt.Errorf("%s", failure)
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(filepath.Join(root, "opentui", "count.ts")); err != nil {
+		bin, executableErr := os.Executable()
+		if executableErr != nil {
+			return executableErr
+		}
+		root = filepath.Dir(filepath.Dir(bin))
+	}
+	countArgs := []string{filepath.Join(root, "opentui", "count.ts")}
+	if jsonOutput {
+		countArgs = append(countArgs, "--json")
+	}
+	run := exec.Command("bun", countArgs...)
+	run.Stdin = strings.NewReader(line.String())
+	run.Stdout = output
+	run.Stderr = os.Stderr
+	return run.Run()
 }
 
 // sourceName gives a compact, distinct label for snapshot errors.

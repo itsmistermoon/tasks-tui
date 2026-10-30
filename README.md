@@ -37,8 +37,21 @@ You can also pass one or more backlog files or project directories. Use `--task 
 | --- | --- |
 | `./bin/tasks-tui [backlog.md | directory ...]` | Open the task list using discovered and specified sources |
 | `./bin/tasks-tui --task <id> [backlog.md | directory ...]` | Open the matching task detail, using the specified sources |
+| `./bin/tasks-tui --count [backlog.md | directory ...]` | Print the total and counts by status without opening the viewer |
+| `./bin/tasks-tui --count --json [backlog.md | directory ...]` | Print total, counts by status, and counts per backlog as JSON |
 
 Press `?` for help, `b` to browse sources and filters, or `/` to search.
+
+## Task counts
+
+`--count` reads the same discovered or explicitly supplied backlogs as the viewer and prints one line with the default visible total (in progress, queued, blocked, and held) and counts for all six statuses: in progress, queued, blocked, held, done, and archived. Add `--json` for machine-readable counts, including `total_all` (including done and archived) and the per-backlog breakdown:
+
+```sh
+./bin/tasks-tui --count
+./bin/tasks-tui --count --json ~/projects/my-app
+```
+
+The short output can be used directly in a panel or status bar, for example `./bin/tasks-tui --count | cut -d '·' -f 1-3`. The JSON output can be consumed by a panel that needs a particular status or backlog. Counting is read-only and does not change backlog files.
 
 ## Inspect a task
 
@@ -100,4 +113,4 @@ go vet ./...
 bun test
 ```
 
-The OpenTUI frontend lives in `opentui/`. The Go backend discovers sources, reads snapshots, and serves archived note history. The screenshots above use fictional example tasks.
+The OpenTUI frontend lives in `opentui/`. The Go backend discovers sources, reads snapshots, serves archived note history, and provides task counts. The screenshots above use fictional example tasks.

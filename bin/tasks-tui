@@ -2,4 +2,8 @@
 TASKS_TUI_ENTRY="$0"
 if [ -L "$TASKS_TUI_ENTRY" ]; then TASKS_TUI_ENTRY="$(readlink "$TASKS_TUI_ENTRY")"; fi
 TASKS_TUI_DIR="$(CDPATH= cd -- "$(dirname -- "$TASKS_TUI_ENTRY")/.." && pwd)"
+if [ "${1:-}" = "--count" ]; then
+  shift
+  exec "$TASKS_TUI_DIR/bin/tasks-backend" --count "$@"
+fi
 exec bun "$TASKS_TUI_DIR/opentui/app.ts" "$@"

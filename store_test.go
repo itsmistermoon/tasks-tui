@@ -70,6 +70,30 @@ func TestCountOutputAndExplicitSource(t *testing.T) {
 	}
 }
 
+func TestCountKeepsReadableBacklogsWhenAnotherFails(t *testing.T) {
+	d := t.TempDir()
+	readable := filepath.Join(d, "readable.md")
+	unreadable := filepath.Join(d, "missing.md")
+	if err := os.WriteFile(readable, []byte("## Queued\n- [ ] queued - Waiting\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var output strings.Builder
+	if err := printCounts([]string{readable, unreadable, "--json"}, &output); err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Total  int            `json:"total"`
+		Errors []string       `json:"errors"`
+		Status map[string]int `json:"statuses"`
+	}
+	if err := json.Unmarshal([]byte(output.String()), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Total < 1 || got.Status["Queued"] < 1 || len(got.Errors) != 1 {
+		t.Fatalf("unexpected partial count: %#v", got)
+	}
+}
+
 func TestDiscoverUsesTasksAxiFile(t *testing.T) {
 	d := t.TempDir()
 	p := filepath.Join(d, "custom.md")

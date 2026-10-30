@@ -93,7 +93,10 @@ func printCounts(args []string, output io.Writer) error {
 		return err
 	}
 	for _, failure := range snapshot.Errors {
-		return fmt.Errorf("%s", failure)
+		fmt.Fprintln(os.Stderr, failure)
+	}
+	if len(snapshot.Errors) == len(snapshot.Sources) && len(snapshot.Errors) > 0 {
+		return fmt.Errorf("no readable backlogs")
 	}
 	root, err := os.Getwd()
 	if err != nil {

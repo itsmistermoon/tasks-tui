@@ -3,8 +3,10 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -69,6 +71,53 @@ func serveSnapshots(args []string) error {
 		}
 	}
 	return scanner.Err()
+}
+
+func printCounts(args []string, output io.Writer) error {
+	jsonOutput := false
+	sources := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg == "--json" {
+			jsonOutput = true
+		} else {
+			sources = append(sources, arg)
+		}
+	}
+	session := snapshotSession{store: Store{cache: map[string]sourceCache{}}, known: map[string]bool{}}
+	var line strings.Builder
+	if err := session.snapshot(sources, &line); err != nil {
+		return err
+	}
+	var snapshot snapshotResult
+	if err := json.Unmarshal([]byte(line.String()), &snapshot); err != nil {
+		return err
+	}
+	for _, failure := range snapshot.Errors {
+		fmt.Fprintln(os.Stderr, failure)
+	}
+	if len(snapshot.Errors) == len(snapshot.Sources) && len(snapshot.Errors) > 0 {
+		return fmt.Errorf("no readable backlogs")
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(filepath.Join(root, "opentui", "count.ts")); err != nil {
+		bin, executableErr := os.Executable()
+		if executableErr != nil {
+			return executableErr
+		}
+		root = filepath.Dir(filepath.Dir(bin))
+	}
+	countArgs := []string{filepath.Join(root, "opentui", "count.ts")}
+	if jsonOutput {
+		countArgs = append(countArgs, "--json")
+	}
+	run := exec.Command("bun", countArgs...)
+	run.Stdin = strings.NewReader(line.String())
+	run.Stdout = output
+	run.Stderr = os.Stderr
+	return run.Run()
 }
 
 // sourceName gives a compact, distinct label for snapshot errors.

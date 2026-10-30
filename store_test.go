@@ -48,6 +48,73 @@ func TestDiscoverDeduplicates(t *testing.T) {
 	}
 }
 
+func TestCountOutputAndExplicitSource(t *testing.T) {
+	d := t.TempDir()
+	p := filepath.Join(d, "backlog.md")
+	if err := os.WriteFile(p, []byte("## In flight\n- [ ] active - Active\n## Queued\n- [ ] queued - Waiting\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var output strings.Builder
+	if err := printCounts([]string{p, "--json"}, &output); err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Total    int            `json:"total"`
+		Statuses map[string]int `json:"statuses"`
+	}
+	if err := json.Unmarshal([]byte(output.String()), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Total < 2 || got.Statuses["In progress"] < 1 || got.Statuses["Queued"] < 1 {
+		t.Fatalf("unexpected count: %#v", got)
+	}
+}
+
+func TestCountKeepsReadableBacklogsWhenAnotherFails(t *testing.T) {
+	d := t.TempDir()
+	readable := filepath.Join(d, "readable.md")
+	unreadable := filepath.Join(d, "missing.md")
+	if err := os.WriteFile(readable, []byte("## Queued\n- [ ] queued - Waiting\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var output strings.Builder
+	if err := printCounts([]string{readable, unreadable, "--json"}, &output); err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Total  int            `json:"total"`
+		Errors []string       `json:"errors"`
+		Status map[string]int `json:"statuses"`
+	}
+	if err := json.Unmarshal([]byte(output.String()), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Total < 1 || got.Status["Queued"] < 1 || len(got.Errors) != 1 {
+		t.Fatalf("unexpected partial count: %#v", got)
+	}
+}
+
+func TestDiscoverUsesTasksAxiFile(t *testing.T) {
+	d := t.TempDir()
+	p := filepath.Join(d, "custom.md")
+	if err := os.WriteFile(p, []byte("## Queued\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TASKS_AXI_FILE", p)
+	got := discover(filepath.Join(d, "elsewhere"))
+	resolved, err := filepath.EvalSymlinks(p)
+	found := false
+	for _, source := range got {
+		if filepath.Clean(source) == filepath.Clean(resolved) {
+			found = true
+			break
+		}
+	}
+	if err != nil || !found {
+		t.Fatalf("TASKS_AXI_FILE source not discovered: %#v", got)
+	}
+}
+
 func call(file string, args ...string) (map[string]any, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

@@ -1,6 +1,9 @@
 import type { Task } from "./tasks";
 
-export function parseArgs(args: string[]): { taskId?: string; sources: string[] } {
+export function parseArgs(args: string[]): {
+  taskId?: string;
+  sources: string[];
+} {
   const sources: string[] = [];
   let taskId: string | undefined;
   for (let i = 0; i < args.length; i++) {

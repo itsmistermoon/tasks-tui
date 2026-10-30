@@ -24,6 +24,7 @@ import { truncateText } from "./truncate";
 import { SnapshotClient } from "./snapshot-client";
 import { helpContent } from "./help";
 import { parseArgs, resolveTask } from "./cli";
+import { taskListCountLabel } from "./task-list-count";
 import {
   icons,
   status,
@@ -161,9 +162,6 @@ function listTasks() {
   visible = filterTasks(data.tasks, { query, source, group, showDone });
   if (!visible.some((task) => task.Key === selected))
     selected = visible[0]?.Key || "";
-}
-function visibleTaskTotal() {
-  return countTasks(data.tasks).total;
 }
 function nav() {
   navItems = [
@@ -891,8 +889,11 @@ function renderTaskList(p: BoxRenderable, oldScroll: number) {
       "panel-heading",
       (source ? sourceName(source) : "all backlogs") +
         " · " +
-        (source || group || query ? visible.length : visibleTaskTotal()) +
-        " tasks",
+        taskListCountLabel(
+          data.tasks,
+          visible.length,
+          Boolean(source || group || query),
+        ),
       activeBorder,
     ),
   );

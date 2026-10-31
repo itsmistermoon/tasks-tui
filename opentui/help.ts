@@ -26,7 +26,7 @@ export function helpBindings(panel: HelpPanel, width: number): { title: string; 
   return [{ title, bindings }, { title: "everywhere", bindings: [
     ["← → h l", "move between panels"], ["/", "filter current view"],
     ["d", "show or hide completed tasks"], ["a", "add a backlog source"],
-    ["r", "refresh or reload detail"], ["?", "open help"],
+    ["r", "refresh or reload detail"], ["L", "show or hide the last command's output"], ["?", "open help"],
     ["q ctrl+c", "quit"],
   ] }];
 }

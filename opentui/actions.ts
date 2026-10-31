@@ -13,7 +13,7 @@ export type TaskAction = {
   input?: { label: string; initial: string };
   args: (value: string) => string[];
 };
-export type ActionResult = { ok: boolean; message: string };
+export type ActionResult = { ok: boolean; code: number | null; summary: string; output: string };
 
 const blank = (value: unknown) => value === undefined || value === null || value === "" || value === "-" || value === "none";
 
@@ -51,34 +51,23 @@ export function taskActions(task: Task): TaskAction[] {
 }
 
 export function commandArgs(action: TaskAction, task: Task, value = ""): string[] {
-  return [...action.args(value), "--file", task.Source, "--json"];
+  return [...action.args(value), "--file", task.Source];
 }
 
 export function formatCommand(args: string[]): string {
   return ["tasks-axi", ...args].map((arg) => (/^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replaceAll("'", `'\\''`)}'`)).join(" ");
 }
 
-function summary(result: any): string {
-  const parts = [icons.Done, result.action, result.task?.id ?? result.id];
-  if (result.action === "mv") parts.push("→", result.to);
-  if (result.action === "prune") parts.push(`archived ${result.archived}, kept ${result.kept}`);
-  return parts.filter((part) => part !== undefined && part !== null).join(" ");
-}
-
-// tasks-axi reports failures on stdout or stderr; show them unchanged.
+// The exit code decides success; the human-readable output is kept unchanged for display.
 export async function runTasksAxi(args: string[], bin = "tasks-axi"): Promise<ActionResult> {
   let child;
   try {
     child = Bun.spawn([bin, ...args], { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
   } catch (error) {
-    return { ok: false, message: String(error) };
+    return { ok: false, code: null, summary: String(error), output: String(error) };
   }
   const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
-  if (code === 0) {
-    try {
-      const result = JSON.parse(stdout);
-      if (result.ok) return { ok: true, message: summary(result) };
-    } catch {}
-  }
-  return { ok: false, message: [stdout.trim(), stderr.trim()].filter(Boolean).join("\n") || `tasks-axi exited with code ${code}` };
+  const output = [stdout.trimEnd(), stderr.trimEnd()].filter(Boolean).join("\n") || `tasks-axi exited with code ${code}`;
+  const first = output.split("\n")[0];
+  return { ok: code === 0, code, summary: code === 0 ? first.replace(/^ok:\s*/, icons.Done + " ") : first, output };
 }

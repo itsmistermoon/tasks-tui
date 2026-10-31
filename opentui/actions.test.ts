@@ -30,7 +30,7 @@ test("builds the tasks-axi command for the task's backlog", () => {
   const t = task({ id: "a", state: "in_flight", deps: "blocked-by:b,blocked-by:c" });
   const unblock = taskActions(t).find((action) => action.key === "u")!;
   expect(unblock.input?.initial).toBe("b");
-  expect(commandArgs(unblock, t, "c")).toEqual(["unblock", "a", "--by", "c", "--file", "/one/backlog.md", "--json"]);
+  expect(commandArgs(unblock, t, "c")).toEqual(["unblock", "a", "--by", "c", "--file", "/one/backlog.md"]);
   expect(formatCommand(["hold", "a", "--reason", "it's late", "--file", "/one/backlog.md"])).toBe(
     `tasks-axi hold a --reason 'it'\\''s late' --file /one/backlog.md`,
   );
@@ -38,14 +38,14 @@ test("builds the tasks-axi command for the task's backlog", () => {
 
 test("runs tasks-axi and reports its result or its error unchanged", async () => {
   const file = join(await mkdtemp(join(tmpdir(), "tasks-tui-actions-")), "backlog.md");
-  expect((await runTasksAxi(["add", "a1", "Alpha", "--file", file, "--json"])).ok).toBe(true);
+  expect((await runTasksAxi(["add", "a1", "Alpha", "--file", file])).ok).toBe(true);
   const t = task({ id: "a1", title: "Alpha" });
   t.Source = file;
   const start = taskActions(t).find((action) => action.key === "s")!;
-  expect(await runTasksAxi(commandArgs(start, t))).toEqual({ ok: true, message: "✔ start a1" });
+  expect(await runTasksAxi(commandArgs(start, t))).toMatchObject({ ok: true, code: 0, summary: "✔ start a1 -> In flight" });
   expect(await readFile(file, "utf8")).toContain("## In flight\n- [ ] a1 - Alpha");
-  const failed = await runTasksAxi(["start", "missing", "--file", file, "--json"]);
-  expect(failed.ok).toBe(false);
-  expect(failed.message).toStartWith('error: "Task \\"missing\\" not found in this backlog"\ncode: NOT_FOUND');
+  const failed = await runTasksAxi(["start", "missing", "--file", file]);
+  expect(failed).toMatchObject({ ok: false, code: 1 });
+  expect(failed.output).toStartWith('error: "Task \\"missing\\" not found in this backlog"\ncode: NOT_FOUND');
   expect(await runTasksAxi(["start", "a1"], join(tmpdir(), "no-such-tasks-axi"))).toMatchObject({ ok: false });
 });

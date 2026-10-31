@@ -151,7 +151,8 @@ let actionTask: Task | null = null,
   actionRunning = false,
   actedKey = "",
   updatedAt: Date | null = null,
-  actionError = "";
+  lastRun: { command: string; result: ActionResult } | null = null,
+  logOpen = false;
 let helpPanel: HelpPanel = "browse";
 const text = (
   id: string,
@@ -284,10 +285,8 @@ function render(underlay = false) {
       ? helpDimensions(helpPanel, renderer.width, renderer.height)
       : overlayMode === "actions"
         ? modalSize(actionsWidth(), actionMenu.length + 6)
-        : overlayMode === "error"
-          ? modalSize(76, actionError.split("\n").reduce((sum, row) => sum + Math.max(1, Math.ceil(Bun.stringWidth(row) / 70)), 0) + 8)
         : overlayMode === "confirm"
-          ? modalSize(76, Math.ceil(Bun.stringWidth(command) / 70) + Math.ceil(Bun.stringWidth(actionChoice?.warning || "") / 70) + 10)
+          ? modalSize(76, Math.ceil(Bun.stringWidth(command) / 70) + Math.ceil(Bun.stringWidth(actionChoice?.warning || "") / 70) + 9)
           : modalSize(64, 9);
     const { width, height } = size;
     const p = box("modal", {
@@ -305,7 +304,7 @@ function render(underlay = false) {
       shouldFill: true,
     });
     renderer.root.add(p);
-    const modalTitle = line("modal-title", overlayMode === "help" ? "help" : overlayMode === "add" ? "add source" : overlayMode === "actions" ? `actions · ${actionTask?.Data.id}` : overlayMode === "confirm" ? actionChoice?.question || "" : overlayMode === "error" ? `${actionChoice?.label} failed · ${actionTask?.Data.id}` : `${actionChoice?.label} · ${actionTask?.Data.id}`, activeBorder);
+    const modalTitle = line("modal-title", overlayMode === "help" ? "help" : overlayMode === "add" ? "add source" : overlayMode === "actions" ? `actions · ${actionTask?.Data.id}` : overlayMode === "confirm" ? actionChoice?.question || "" : `${actionChoice?.label} · ${actionTask?.Data.id}`, activeBorder);
     modalTitle.attributes = 1;
     p.add(modalTitle);
     p.add(line("modal-title-gap", " ", RGBA.fromIndex(8)));
@@ -372,24 +371,10 @@ function render(underlay = false) {
       field.focus();
       p.add(box("action-input-spacer", { flexGrow: 1, minHeight: 1 }));
       p.add(keybindBar("action-input-hint", [actionChoice?.confirm ? "↵ review" : "↵ run", "esc cancel"], { paddingRight: 0 }));
-    } else if (overlayMode === "error") {
-      p.add(line("error-label", "Nothing was changed. tasks-axi explains why:", "#d8d8de"));
-      p.findDescendantById("error-label")!.attributes = 1;
-      p.add(text("error-text", actionError, RGBA.fromIndex(9), { width: "100%", wrapMode: "char" }));
-      p.add(box("error-spacer", { flexGrow: 1, minHeight: 1 }));
-      const keys = box("error-hint", { flexDirection: "row", justifyContent: "flex-end", width: "100%", height: 1, flexShrink: 0 });
-      keys.add(line("error-keys", new StyledText([
-        ...(actionChoice?.input ? [fg(activeBorder)("[e]"), fg("#d8d8de")(" edit   ")] : []),
-        fg(activeBorder)("[r]"), fg("#d8d8de")(" retry   "),
-        fg(activeBorder)("[n]"), fg("#d8d8de")(" close"),
-      ]) as any, RGBA.defaultForeground()));
-      p.add(keys);
     } else if (overlayMode === "confirm") {
       p.add(text("confirm-warning", actionChoice?.warning || "", RGBA.fromIndex(9), { width: "100%" }));
       p.add(text("confirm-backlog", new StyledText([fg("#d8d8de")("backlog: "), fg("#86aaf5")(actionTask ? sourceName(actionTask.Source) : "")]), RGBA.defaultForeground(), { width: "100%" }));
       p.add(line("confirm-gap", " ", RGBA.fromIndex(8)));
-      p.add(line("confirm-label", "tasks-tui will run:", "#d8d8de"));
-      p.findDescendantById("confirm-label")!.attributes = 1;
       p.add(text("confirm-command", command, RGBA.fromIndex(14), { width: "100%", wrapMode: "char" }));
       p.add(box("confirm-spacer", { flexGrow: 1, minHeight: 1 }));
       const decision = box("confirm-hint", { flexDirection: "row", justifyContent: "flex-end", width: "100%", height: 1, flexShrink: 0 });
@@ -435,6 +420,7 @@ function render(underlay = false) {
   });
   if (focus === "search") input.focus();
   const renderFooter = () => {
+    if (logOpen && lastRun) frame.add(commandLog(lastRun));
     const footer = box("footer-row", { flexDirection: "row", width: "100%", height: 1, flexShrink: 0 });
     frame.add(footer);
     const location = box("status-bar", { flexDirection: "row", flexGrow: 1, flexBasis: 0, height: 1, paddingLeft: 1 });
@@ -444,7 +430,7 @@ function render(underlay = false) {
     location.add(line("breadcrumb", group === "home" ? "home" : `${category} > ${current?.label || "all"}`, focus === "search" ? "#858796" : RGBA.defaultForeground()));
     if ((actionRunning || actionResult) && focus !== "search") {
       // The footer has one line, so a multi-line tasks-axi error is joined onto it.
-      const message = actionRunning ? "running tasks-axi…" : actionResult!.message.split("\n").join("  ");
+      const message = actionRunning ? "running tasks-axi…" : actionResult!.summary;
       const result = line("action-result", "  " + message, actionRunning ? "#858796" : actionResult!.ok ? colors.Done : RGBA.fromIndex(9));
       result.flexShrink = 1;
       location.add(result);
@@ -1026,6 +1012,27 @@ async function readSnapshot() {
     if (focus !== "search") render();
   }
 }
+function commandLog(run: { command: string; result: ActionResult }) {
+  const { result } = run;
+  const lines = result.output.split("\n");
+  const rows = (value: string) => Math.max(1, Math.ceil(Bun.stringWidth(value) / Math.max(1, renderer.width - 4)));
+  const height = Math.max(5, Math.min(rows(run.command + " · exit 000") + lines.reduce((sum, row) => sum + rows(row), 0) + 4, Math.floor(renderer.height / 2)));
+  const panel = box("command-log", { border: true, borderStyle: "rounded", borderColor: result.ok ? inactiveBorder : RGBA.fromIndex(9), paddingLeft: 1, paddingRight: 1, height, flexShrink: 0 });
+  const header = text("command-log-title", new StyledText([
+    fg(result.ok ? colors.Done : RGBA.fromIndex(9))(result.ok ? icons.Done + " " : "✗ "),
+    fg("#e0e0e4")(run.command),
+    fg("#858796")(` · exit ${result.code ?? "-"}`),
+  ]), RGBA.defaultForeground(), { width: "100%", wrapMode: "char", flexShrink: 0 });
+  header.attributes = 1;
+  panel.add(header);
+  // Colour tasks-axi's own lines without changing their text.
+  const shade = (row: string) => /^(ok:|error:)/.test(row) ? (result.ok ? colors.Done : RGBA.fromIndex(9)) : /^code:/.test(row) ? "#858796" : /^help\[/.test(row) ? activeBorder : "#d8d8de";
+  const body = box("command-log-body", { flexGrow: 1, overflow: "hidden" });
+  lines.forEach((row, i) => body.add(text("command-log-line-" + i, row, shade(row), { width: "100%", wrapMode: "char" })));
+  panel.add(body);
+  panel.add(keybindBar("command-log-hint", [...(!result.ok && actionChoice?.input ? ["e edit"] : []), ...(!result.ok ? ["r retry"] : []), "esc close"], { paddingRight: 0, justifyContent: "flex-start" }));
+  return panel;
+}
 function openActions(task: Task) {
   actionTask = structuredClone(task);
   const link = navigation.mode === "links" ? linkEntries()[linkIndex] : undefined;
@@ -1036,7 +1043,7 @@ function openActions(task: Task) {
   actionIndex = 0;
   actionResult = null;
   if (!actionMenu.length) {
-    actionResult = { ok: false, message: "archived tasks have no actions" };
+    actionResult = { ok: false, code: null, summary: "archived tasks have no actions", output: "" };
     render();
     return;
   }
@@ -1066,14 +1073,13 @@ async function runAction() {
   navigate({ type: "dismiss" });
   actionRunning = true;
   render();
-  const result = await runTasksAxi(commandArgs(action, task, actionValue));
+  const args = commandArgs(action, task, actionValue);
+  const result = await runTasksAxi(args);
   actionRunning = false;
-  // Errors open a dialog that keeps tasks-axi's guidance and offers edit or retry.
+  lastRun = { command: formatCommand(args), result };
+  // Successes stay in the status bar; failures open the command log with tasks-axi's guidance.
   actionResult = result.ok ? result : null;
-  if (!result.ok) {
-    actionError = result.message;
-    navigate({ type: "modal", modal: "error" });
-  }
+  if (!result.ok) logOpen = true;
   if (renderer.isDestroyed) return;
   // Read after the write even if a refresh started before it.
   await refreshing;
@@ -1190,25 +1196,34 @@ renderer.keyInput.on("keypress", (key) => {
     }
     return;
   }
-  if (navigation.mode === "error") {
-    if (key.name === "r") runAction();
-    else if (key.name === "e" && actionChoice?.input) {
-      key.preventDefault();
-      navigate({ type: "dismiss" });
-      navigate({ type: "modal", modal: "input" });
-      render();
-    } else if (key.name === "n" || key.name === "q" || key.name === "escape") {
-      navigate({ type: "dismiss" });
-      render();
-    }
-    return;
-  }
   if (navigation.mode === "confirm") {
     if (key.name === "y") runAction();
     else if (key.name === "n" || key.name === "q" || key.name === "escape") {
       navigate({ type: "dismiss" });
       render();
     }
+    return;
+  }
+  if (logOpen && lastRun) {
+    if (key.name === "escape" || key.sequence === "q" || key.sequence === "L") {
+      logOpen = false;
+      render();
+      return;
+    }
+    if (!lastRun.result.ok && key.sequence === "r") {
+      runAction();
+      return;
+    }
+    if (!lastRun.result.ok && key.sequence === "e" && actionChoice?.input) {
+      key.preventDefault();
+      logOpen = false;
+      navigate({ type: "modal", modal: "input" });
+      render();
+      return;
+    }
+  } else if (key.sequence === "L" && lastRun) {
+    logOpen = true;
+    render();
     return;
   }
   if (actionResult) {

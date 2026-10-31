@@ -86,7 +86,7 @@ Select a task in the list or inspector and press `Enter` to open its actions. Mo
 
 The menu lists only the actions that apply to the task's current state; archived tasks have none. Actions that need a value, such as a hold reason, ask for it first. Actions that cannot be undone, or that affect several tasks, open a dialog that asks the question (for example "delete task a1?"), warns what will be lost or affected, names the affected backlog, and shows the exact command; press `y` to run it or `n`, `q`, or `Esc` to cancel. Any other key leaves the dialog open. There is no setting or shortcut that skips this confirmation.
 
-Each action runs `tasks-axi <command> --file <backlog> --json` against the task's own backlog, so locking, formatting, and validation remain the responsibility of `tasks-axi`. A successful action shows a `✔` summary in the status bar next to the breadcrumb; the next key press dismisses it. A failed action opens a dialog with the `tasks-axi` error exactly as it was printed, including its suggested next steps. Press `e` to edit the value you entered, `r` to run the same command again, or `n`, `q`, or `Esc` to close it. To the left of the key hints, `updated HH:MM` shows when the view last took in a change, including the result of each action. The view then reloads and keeps the task selected, even when the change moves it out of the current list, for example when done tasks are hidden. A deleted or moved task is no longer selected.
+Each action runs `tasks-axi <command> --file <backlog>` against the task's own backlog, so locking, formatting, and validation remain the responsibility of `tasks-axi`; its exit code decides whether the action succeeded. A successful action shows the first line of the `tasks-axi` output as a `✔` summary in the status bar next to the breadcrumb; the next key press dismisses it. A failed action opens a command panel below the task panels with the command, its exit code, and the `tasks-axi` output exactly as it was printed, including its suggested next steps. Press `e` to edit the value you entered, `r` to run the same command again, or `Esc` or `q` to close the panel. Press `L` at any time to show or hide the panel for the last command. To the left of the key hints, `updated HH:MM` shows when the view last took in a change, including the result of each action. The view then reloads and keeps the task selected, even when the change moves it out of the current list, for example when done tasks are hidden. A deleted or moved task is no longer selected.
 
 ## Keyboard
 
@@ -103,6 +103,7 @@ Each action runs `tasks-axi <command> --file <backlog> --json` against the task'
 | `d` | Show or hide completed and archived tasks |
 | `a` | Add a backlog file or directory |
 | `r` | Refresh sources or reload changed task details |
+| `L` | Show or hide the output of the last task action |
 | `Esc` | Close a dialog (`q` also closes the actions menu and confirmations), clear the filter, or return from status cards |
 | `?` | Open help |
 | `q` / `Ctrl+C` | Quit |

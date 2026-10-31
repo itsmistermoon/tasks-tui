@@ -129,7 +129,7 @@ export type InspectorTab = typeof inspectorTabs[number];
 export function isInspectorTab(mode: string): mode is InspectorTab {
   return inspectorTabs.some((tab) => tab === mode);
 }
-export const modals = ["help", "add", "actions", "input", "confirm", "error"] as const;
+export const modals = ["help", "add", "actions", "input", "confirm"] as const;
 export type Modal = typeof modals[number];
 export function isModal(mode: string): mode is Modal {
   return modals.some((modal) => modal === mode);

@@ -145,7 +145,7 @@ export type NavigationAction =
   | { type: "modal"; modal: "help" | "add" }
   | { type: "dismiss" }
   | { type: "cards"; focused: boolean; index?: number }
-  | { type: "close" };
+  | { type: "close"; width: number; task: Task | null };
 
 export function transitionNavigation(state: NavigationState, action: NavigationAction): NavigationState {
   let next = { ...state };
@@ -186,8 +186,12 @@ export function transitionNavigation(state: NavigationState, action: NavigationA
   } else if (action.type === "expand") next.expanded = !next.expanded;
   else if (action.type === "resize" && action.width >= 150) next.expanded = false;
   else if (action.type === "close") {
-    next.opened = null;
-    next.inspecting = false;
+    if (action.width >= 150) {
+      if (!next.opened && action.task?.Key === next.selected) select(action.task, true);
+    } else {
+      next.opened = null;
+      next.inspecting = false;
+    }
     next.mode = "list";
   }
   if (!isInspectorTab(next.mode)) next.expanded = false;

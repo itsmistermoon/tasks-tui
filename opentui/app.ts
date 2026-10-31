@@ -201,7 +201,7 @@ function backFromTask() {
     navigate({ type: "expand" });
     render();
   } else {
-    navigate({ type: "close" });
+    navigate({ type: "close", width: renderer.width, task: visible.find((task) => task.Key === navigation.selected) || null });
     render();
   }
 }

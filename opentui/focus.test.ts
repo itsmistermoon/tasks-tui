@@ -62,6 +62,18 @@ test("empty results and restored results synchronize the preview", async () => {
   expect([restored.selected, restored.opened?.Key, restored.inspectorMode]).toEqual(["two", "two", "detail"]);
 });
 
+test("closing Browse or Backlog keeps the selected preview at full width", async () => {
+  const { transitionNavigation } = await import("./navigation");
+  for (const mode of ["browse", "list"] as const) {
+    const next = transitionNavigation({ ...state, mode }, { type: "close", width: 160, task: first });
+    expect([next.selected, next.opened?.Key, next.inspecting, next.inspectorMode, next.mode]).toEqual(["one", "one", true, "history", "list"]);
+    const missing = transitionNavigation({ ...state, mode, opened: null, inspecting: false }, { type: "close", width: 160, task: first });
+    expect([missing.selected, missing.opened?.Key, missing.inspecting]).toEqual(["one", "one", true]);
+  }
+  const compact = transitionNavigation(state, { type: "close", width: 70, task: first });
+  expect([compact.selected, compact.opened, compact.inspecting]).toEqual(["one", null, false]);
+});
+
 test("opening tasks enables compact expansion for all entry paths", async () => {
   const { transitionNavigation } = await import("./navigation");
   for (const mode of ["list", "inspector"] as const) {

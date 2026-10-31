@@ -140,8 +140,10 @@ let data: Snapshot = { tasks: [], sources: [], errors: [], failed: [] },
   sections: { id: string; name: string }[] = [];
 let taskLookupPending = !!cli.taskId, taskLookupWarning = "";
 let showingCachedSnapshot = false;
+// Menu entries that act inside the viewer instead of running tasks-axi.
+type MenuItem = TaskAction & { run?: () => void };
 let actionTask: Task | null = null,
-  actionMenu: TaskAction[] = [],
+  actionMenu: MenuItem[] = [],
   actionIndex = 0,
   actionChoice: TaskAction | null = null,
   actionValue = "",
@@ -204,15 +206,6 @@ function openTask(t: Task, reload = false) {
   focus = "list";
   if (previousMode !== navigation.mode) render();
   else renderActiveView();
-}
-function backFromTask() {
-  if (navigation.inspecting && navigation.expanded) {
-    navigate({ type: "expand" });
-    render();
-  } else {
-    navigate({ type: "close", width: renderer.width, task: visible.find((task) => task.Key === navigation.selected) || null });
-    render();
-  }
 }
 function line(id: string, content: string, fg: any) {
   return text(id, content, fg, { height: 1 });
@@ -1011,7 +1004,11 @@ async function readSnapshot() {
 }
 function openActions(task: Task) {
   actionTask = structuredClone(task);
-  actionMenu = taskActions(task);
+  const link = navigation.mode === "links" ? linkEntries()[linkIndex] : undefined;
+  actionMenu = [
+    ...(link ? [{ key: "o", label: link.task ? "open task " + link.label : "open " + link.label, confirm: false, args: () => [], run: () => activateLink(linkIndex) }] : []),
+    ...taskActions(task),
+  ];
   actionIndex = 0;
   actionResult = null;
   if (!actionMenu.length) {
@@ -1022,7 +1019,13 @@ function openActions(task: Task) {
   navigate({ type: "modal", modal: "actions" });
   render();
 }
-function chooseAction(action: TaskAction) {
+function chooseAction(action: MenuItem) {
+  if (action.run) {
+    navigate({ type: "dismiss" });
+    render();
+    action.run();
+    return;
+  }
   actionChoice = action;
   actionValue = action.input?.initial || "";
   if (action.input) navigate({ type: "modal", modal: "input" });
@@ -1055,6 +1058,7 @@ async function runAction() {
     pending = null;
   }
   listTasks(updated);
+  revealSelected = visible.some((t) => t.Key === task.Key);
   render();
 }
 function linkEntries(): { label: string; url?: string; task?: Task }[] {
@@ -1141,7 +1145,7 @@ renderer.keyInput.on("keypress", (key) => {
   }
   if (navigation.mode === "actions") {
     const name = ({ j: "down", k: "up" } as Record<string, string>)[key.sequence] || key.name;
-    if (name === "escape") {
+    if (name === "escape" || key.sequence === "q") {
       navigate({ type: "dismiss" });
       render();
     } else if (name === "up" || name === "down") {
@@ -1158,7 +1162,7 @@ renderer.keyInput.on("keypress", (key) => {
   }
   if (navigation.mode === "confirm") {
     if (key.name === "y") runAction();
-    else if (key.name === "n" || key.name === "escape") {
+    else if (key.name === "n" || key.name === "q" || key.name === "escape") {
       navigate({ type: "dismiss" });
       render();
     }
@@ -1217,10 +1221,10 @@ renderer.keyInput.on("keypress", (key) => {
     if (actionResult) {
       actionResult = null;
       render();
-    } else if (!isInspectorTab(navigation.mode)) backFromTask();
+    }
     return;
   }
-  if (name === "x") {
+  if (name === "return" && (isInspectorTab(navigation.mode) || navigation.mode === "list")) {
     const task = isInspectorTab(navigation.mode) ? navigation.opened : navigation.mode === "list" ? visible.find((t) => t.Key === navigation.selected) : null;
     if (task && !actionRunning) openActions(task);
     return;
@@ -1297,10 +1301,6 @@ renderer.keyInput.on("keypress", (key) => {
       scroll?.scrollChildIntoView("link-" + linkIndex);
       return;
     }
-    if (name === "return") {
-      activateLink(linkIndex);
-      return;
-    }
   }
   if (navigation.mode === "browse") {
     if (
@@ -1336,10 +1336,7 @@ renderer.keyInput.on("keypress", (key) => {
   }
   if (navigation.mode === "list") {
     let i = visible.findIndex((t) => t.Key === navigation.selected);
-    if (name === "return") {
-      if (visible[i]) openTask(visible[i]);
-      return;
-    } else if (
+    if (
       ["up", "down", "home", "end", "pageup", "pagedown"].includes(name)
     )
       i = navigationTarget(taskListScroll, i, visible.length, name);

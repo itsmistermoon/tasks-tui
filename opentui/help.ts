@@ -15,12 +15,11 @@ export function helpBindings(panel: HelpPanel, width: number): { title: string; 
     bindings = [["← → h l", "select status"], ["↓ j", "go to task list"], ["enter", "open selected status"]];
   } else if (panel === "list") {
     title = "backlog";
-    bindings = [...commonList, ["enter", "open inspector"], ["x", "task actions"], ["↑ k", "from first task, go to cards in Home"]];
+    bindings = [...commonList, ["enter", "task actions"], ["→ l", "open inspector"], ["↑ k", "from first task, go to cards in Home"]];
   } else {
     title = `inspector · ${panel}`;
     bindings = [["u i o", "detail / links / history"], ["pgup pgdn", "previous / next task"], ["↑ ↓ j k", panel === "links" ? "select link" : "scroll"]];
-    if (panel === "links") bindings.push(["enter", "open selected link"]);
-    bindings.push(["x", "task actions"]);
+    bindings.push(["enter", panel === "links" ? "actions, including open link" : "task actions"]);
     if (width < 150) bindings.push(["e", "toggle inspector expansion"]);
     bindings.push(["↑ k", "from top, go to cards in Home"]);
   }
@@ -63,9 +62,9 @@ export function footerHints(panel: HelpPanel, width: number, filtering: boolean)
   const panelHints: Record<HelpPanel, string[]> = {
     browse: ["j/k choose", "enter open", "h/l move"],
     cards: ["h/l choose", "j list", "enter open"],
-    list: ["j/k choose", "enter inspect", "x actions", "h/l move"],
-    detail: ["j/k scroll", "u/i/o tabs", "x actions", "h back"],
-    links: ["j/k choose", "enter open", "u/i/o tabs", "h back"],
+    list: ["j/k choose", "enter actions", "h/l move"],
+    detail: ["j/k scroll", "enter actions", "u/i/o tabs", "h back"],
+    links: ["j/k choose", "enter actions", "u/i/o tabs", "h back"],
     history: ["j/k scroll", "u/i/o tabs", "h back"],
   };
   return [...panelHints[panel], "/ filter", "? help", "q quit"];

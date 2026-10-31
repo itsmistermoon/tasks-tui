@@ -275,13 +275,15 @@ function render(underlay = false) {
         background.borderColor = inactiveBorder;
     }
     const modalSize = (width: number, height: number) => ({ width: Math.max(1, Math.min(renderer.width - 2, width)), height: Math.max(3, Math.min(renderer.height - 2, height)) });
+    const actionLabel = (action: MenuItem) => action.label + (action.confirm ? "…" : "");
+    const actionsWidth = () => Math.max(Bun.stringWidth(`actions · ${actionTask?.Data.id}`), Bun.stringWidth("j/k choose · ↵ run · esc close"), ...actionMenu.map((action) => Bun.stringWidth(actionLabel(action)) + 6)) + 4;
     const command = actionTask && actionChoice ? formatCommand(commandArgs(actionChoice, actionTask, actionValue)) : "";
     const size = overlayMode === "help"
       ? helpDimensions(helpPanel, renderer.width, renderer.height)
       : overlayMode === "actions"
-        ? modalSize(64, actionMenu.length + 6)
+        ? modalSize(actionsWidth(), actionMenu.length + 6)
         : overlayMode === "confirm"
-          ? modalSize(76, Math.ceil(Bun.stringWidth(command) / 70) + Math.ceil(Bun.stringWidth(actionChoice?.warning || "") / 70) + 9)
+          ? modalSize(76, Math.ceil(Bun.stringWidth(command) / 70) + Math.ceil(Bun.stringWidth(actionChoice?.warning || "") / 70) + 10)
           : modalSize(64, 9);
     const { width, height } = size;
     const p = box("modal", {
@@ -299,7 +301,7 @@ function render(underlay = false) {
       shouldFill: true,
     });
     renderer.root.add(p);
-    const modalTitle = line("modal-title", overlayMode === "help" ? "help" : overlayMode === "add" ? "add source" : overlayMode === "actions" ? `actions · ${actionTask?.Data.id}` : overlayMode === "confirm" ? actionChoice?.question || "" : `${actionChoice?.label} · ${actionTask?.Data.id}`, overlayMode === "confirm" ? "#e8bb65" : activeBorder);
+    const modalTitle = line("modal-title", overlayMode === "help" ? "help" : overlayMode === "add" ? "add source" : overlayMode === "actions" ? `actions · ${actionTask?.Data.id}` : overlayMode === "confirm" ? actionChoice?.question || "" : `${actionChoice?.label} · ${actionTask?.Data.id}`, activeBorder);
     modalTitle.attributes = 1;
     p.add(modalTitle);
     p.add(line("modal-title-gap", " ", RGBA.fromIndex(8)));
@@ -332,13 +334,14 @@ function render(underlay = false) {
       p.add(box("add-spacer", { flexGrow: 1, minHeight: 1 }));
       p.add(keybindBar("add-hint", ["↵ add", "esc back"], { paddingRight: 0 }));
     } else if (overlayMode === "actions") {
-      const keyWidth = Math.max(1, Math.min(renderer.width - 2, 64) - 4);
+      const labelWidth = Math.max(1, Math.min(renderer.width - 2, actionsWidth()) - 7);
       actionMenu.forEach((action, i) => {
-        const row = box("action-" + i, { flexDirection: "row", width: "100%", height: 1, backgroundColor: selectionBackground, shouldFill: i === actionIndex });
-        const label = line("action-label-" + i, truncateText((i === actionIndex ? "› " : "  ") + action.label + (action.confirm ? " …" : ""), keyWidth - 3, 1), i === actionIndex ? activeBorder : "#d8d8de");
+        const row = box("action-" + i, { flexDirection: "row", width: "100%", height: 1 });
+        const label = line("action-label-" + i, truncateText((i === actionIndex ? "› " : "  ") + actionLabel(action), labelWidth, 1), i === actionIndex ? activeBorder : "#d8d8de");
+        label.attributes = i === actionIndex ? 1 : 0;
         label.flexGrow = 1;
         row.add(label);
-        row.add(text("action-key-" + i, action.key, "#86aaf5", { width: 2, height: 1, attributes: 1 }));
+        row.add(text("action-key-" + i, action.key, "#858796", { width: 1, height: 1, flexShrink: 0 }));
         p.add(row);
       });
       p.add(box("actions-spacer", { flexGrow: 1, minHeight: 1 }));
@@ -367,11 +370,15 @@ function render(underlay = false) {
       p.add(keybindBar("action-input-hint", [actionChoice?.confirm ? "↵ review" : "↵ run", "esc cancel"], { paddingRight: 0 }));
     } else if (overlayMode === "confirm") {
       p.add(text("confirm-warning", actionChoice?.warning || "", RGBA.fromIndex(9), { width: "100%" }));
+      p.add(text("confirm-backlog", new StyledText([fg("#d8d8de")("backlog: "), fg("#86aaf5")(actionTask ? sourceName(actionTask.Source) : "")]), RGBA.defaultForeground(), { width: "100%" }));
       p.add(line("confirm-gap", " ", RGBA.fromIndex(8)));
-      p.add(line("confirm-label", "tasks-tui will run:", "#b8bac5"));
-      p.add(text("confirm-command", command, "#e8bb65", { width: "100%", wrapMode: "char" }));
+      p.add(line("confirm-label", "tasks-tui will run:", "#d8d8de"));
+      p.findDescendantById("confirm-label")!.attributes = 1;
+      p.add(text("confirm-command", command, RGBA.fromIndex(14), { width: "100%", wrapMode: "char" }));
       p.add(box("confirm-spacer", { flexGrow: 1, minHeight: 1 }));
-      p.add(keybindBar("confirm-hint", [`[y] ${actionChoice?.args("")[0]}`, "[n] cancel"], { paddingRight: 0 }));
+      const decision = box("confirm-hint", { flexDirection: "row", justifyContent: "flex-end", width: "100%", height: 1, flexShrink: 0 });
+      decision.add(line("confirm-keys", new StyledText([fg(activeBorder)("[y]"), fg("#d8d8de")(` ${actionChoice?.args("")[0]}   `), fg(activeBorder)("[n]"), fg("#d8d8de")(" cancel")]) as any, RGBA.defaultForeground()));
+      p.add(decision);
     } else {
       p.add(text("help-text", helpContent(helpPanel, renderer.width), "#d8d8de", { width: "100%", flexGrow: 1 }));
       const closeHint = box("help-close-row", { flexDirection: "row", justifyContent: "flex-end", width: "100%", height: 1, flexShrink: 0 });
@@ -382,15 +389,6 @@ function render(underlay = false) {
   }
   if (taskLookupWarning)
     frame.add(line("task-lookup-warning", taskLookupWarning, RGBA.fromIndex(3)));
-  if (actionRunning || actionResult)
-    frame.add(
-      text(
-        "action-result",
-        actionRunning ? "running tasks-axi…" : actionResult!.message + "  ·  esc dismiss",
-        actionRunning ? "#858796" : actionResult!.ok ? RGBA.fromIndex(10) : RGBA.fromIndex(9),
-        { width: "100%", flexShrink: 0 },
-      ),
-    );
   if (data.errors.length)
     frame.add(
       line("live", "● STALE  " + data.errors.join(" · "), RGBA.fromIndex(9)),
@@ -428,6 +426,13 @@ function render(underlay = false) {
     const current = navItems.find((item) => item.source === source && item.group === group);
     const category = group.startsWith("status:") ? "status" : group.startsWith("kind:") ? "types" : group.startsWith("repo:") ? "repositories" : "sources";
     location.add(line("breadcrumb", group === "home" ? "home" : `${category} > ${current?.label || "all"}`, focus === "search" ? "#858796" : RGBA.defaultForeground()));
+    if ((actionRunning || actionResult) && focus !== "search") {
+      // The footer has one line, so a multi-line tasks-axi error is joined onto it.
+      const message = actionRunning ? "running tasks-axi…" : actionResult!.message.split("\n").join("  ");
+      const result = line("action-result", "  " + message, actionRunning ? "#858796" : actionResult!.ok ? colors.Done : RGBA.fromIndex(9));
+      result.flexShrink = 1;
+      location.add(result);
+    }
     if (focus === "search" && input) {
       location.add(line("filter-prefix", " / ", "#858796"));
       input.width = 1;
@@ -499,7 +504,7 @@ function render(underlay = false) {
         ),
       );
       const labelNode = navRow.getChildren()[0];
-      if (labelNode) { labelNode.flexGrow = 1; if (labelNode instanceof TextRenderable) labelNode.attributes = v.source === source && v.group === group ? 1 : 0; }
+      if (labelNode) { labelNode.flexGrow = 1; if (labelNode instanceof TextRenderable) labelNode.attributes = (v.source === source && v.group === group) || i === navIndex ? 1 : 0; }
       if (v.count !== undefined) navRow.add(text("nav-count-" + i, String(v.count).padStart(4), "#858796", { width: 4, height: 1 }));
       ns.add(navRow);
     });
@@ -1168,6 +1173,11 @@ renderer.keyInput.on("keypress", (key) => {
     }
     return;
   }
+  if (actionResult) {
+    actionResult = null;
+    const result = renderer.root.findDescendantById("action-result");
+    if (result instanceof TextRenderable) result.content = "";
+  }
   const name = ({ j: "down", k: "up", h: "left", l: "right" } as Record<string, string>)[key.name] || key.name;
   if ((name === "left" || name === "right" || (navigation.cardsFocused && name === "down"))) {
     const panel: FocusState["panel"] = navigation.cardsFocused ? "cards" : navigation.mode === "browse" ? "browse" : navigation.mode === "list" ? "list" : "inspector";
@@ -1217,13 +1227,7 @@ renderer.keyInput.on("keypress", (key) => {
     renderer.destroy();
     return;
   }
-  if (name === "escape") {
-    if (actionResult) {
-      actionResult = null;
-      render();
-    }
-    return;
-  }
+  if (name === "escape") return;
   if (name === "return" && (isInspectorTab(navigation.mode) || navigation.mode === "list")) {
     const task = isInspectorTab(navigation.mode) ? navigation.opened : navigation.mode === "list" ? visible.find((t) => t.Key === navigation.selected) : null;
     if (task && !actionRunning) openActions(task);

@@ -78,7 +78,7 @@ export function selectBrowse(
     const item = scroll.content.findDescendantById(`nav-label-${index}`);
     if (row instanceof BoxRenderable) row.shouldFill = index === activeIndex;
     if (item instanceof TextRenderable) {
-      item.attributes = index === activeIndex ? 1 : 0;
+      item.attributes = index === activeIndex || index === next ? 1 : 0;
       item.content = truncateText(
         (index === next ? "› " : "  ") + labels[index],
         width,

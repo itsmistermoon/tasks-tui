@@ -84,9 +84,9 @@ Select a task in the list or inspector and press `Enter` to open its actions. Mo
 | `P` | Prune: move all but the most recent done tasks in the backlog to the archive | `prune --keep <n> --state done` | Yes |
 | `D` | Delete the task | `rm <id>` | Yes |
 
-The menu lists only the actions that apply to the task's current state; archived tasks have none. Actions that need a value, such as a hold reason, ask for it first. Actions that cannot be undone, or that affect several tasks, open a dialog that asks the question (for example "delete task a1?"), warns what will be lost or affected, and shows the exact command; press `y` to run it or `n`, `q`, or `Esc` to cancel. Any other key leaves the dialog open. There is no setting or shortcut that skips this confirmation.
+The menu lists only the actions that apply to the task's current state; archived tasks have none. Actions that need a value, such as a hold reason, ask for it first. Actions that cannot be undone, or that affect several tasks, open a dialog that asks the question (for example "delete task a1?"), warns what will be lost or affected, names the affected backlog, and shows the exact command; press `y` to run it or `n`, `q`, or `Esc` to cancel. Any other key leaves the dialog open. There is no setting or shortcut that skips this confirmation.
 
-Each action runs `tasks-axi <command> --file <backlog> --json` against the task's own backlog, so locking, formatting, and validation remain the responsibility of `tasks-axi`. The result appears at the top of the screen: an `ok:` summary, or the `tasks-axi` error exactly as it was printed. Press `Esc` to dismiss it. The view then reloads and keeps the task selected, even when the change moves it out of the current list, for example when done tasks are hidden. A deleted or moved task is no longer selected.
+Each action runs `tasks-axi <command> --file <backlog> --json` against the task's own backlog, so locking, formatting, and validation remain the responsibility of `tasks-axi`. The result appears in the status bar next to the breadcrumb: a `✔` summary, or the `tasks-axi` error as it was printed, with its lines joined onto one line. The next key press dismisses it. The view then reloads and keeps the task selected, even when the change moves it out of the current list, for example when done tasks are hidden. A deleted or moved task is no longer selected.
 
 ## Keyboard
 
@@ -103,7 +103,7 @@ Each action runs `tasks-axi <command> --file <backlog> --json` against the task'
 | `d` | Show or hide completed and archived tasks |
 | `a` | Add a backlog file or directory |
 | `r` | Refresh sources or reload changed task details |
-| `Esc` | Close a dialog (`q` also closes the actions menu and confirmations), dismiss an action result, clear the filter, or return from status cards |
+| `Esc` | Close a dialog (`q` also closes the actions menu and confirmations), clear the filter, or return from status cards |
 | `?` | Open help |
 | `q` / `Ctrl+C` | Quit |
 

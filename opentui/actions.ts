@@ -1,4 +1,4 @@
-import type { Task } from "./tasks";
+import { icons, type Task } from "./tasks";
 
 // Writes are delegated to tasks-axi, which owns the backlog format, locking and atomic writes.
 export type TaskAction = {
@@ -57,7 +57,7 @@ export function formatCommand(args: string[]): string {
 }
 
 function summary(result: any): string {
-  const parts = ["ok:", result.action, result.task?.id ?? result.id];
+  const parts = [icons.Done, result.action, result.task?.id ?? result.id];
   if (result.action === "mv") parts.push("→", result.to);
   if (result.action === "prune") parts.push(`archived ${result.archived}, kept ${result.kept}`);
   return parts.filter((part) => part !== undefined && part !== null).join(" ");

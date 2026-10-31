@@ -42,7 +42,7 @@ test("runs tasks-axi and reports its result or its error unchanged", async () =>
   const t = task({ id: "a1", title: "Alpha" });
   t.Source = file;
   const start = taskActions(t).find((action) => action.key === "s")!;
-  expect(await runTasksAxi(commandArgs(start, t))).toEqual({ ok: true, message: "ok: start a1" });
+  expect(await runTasksAxi(commandArgs(start, t))).toEqual({ ok: true, message: "✔ start a1" });
   expect(await readFile(file, "utf8")).toContain("## In flight\n- [ ] a1 - Alpha");
   const failed = await runTasksAxi(["start", "missing", "--file", file, "--json"]);
   expect(failed.ok).toBe(false);

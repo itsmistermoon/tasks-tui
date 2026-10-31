@@ -58,7 +58,7 @@ export function helpDimensions(panel: HelpPanel, terminalWidth: number, terminal
 export function footerHints(panel: HelpPanel, width: number, filtering: boolean): string[] {
   if (width < 105) return ["? help", "q quit"];
   if (filtering) return ["enter apply", "esc clear"];
-  if (width < 150) return ["/ filter", "d show done", "a add source", "r refresh", "? help", "q quit"];
+  if (width < 150) return [...(["detail", "links", "history"].includes(panel) ? ["u/i/o tabs"] : []), "/ filter", "d show done", "a add source", "r refresh", "? help", "q quit"];
   const panelHints: Record<HelpPanel, string[]> = {
     browse: ["j/k choose", "enter open", "h/l move"],
     cards: ["h/l choose", "j list", "enter open"],

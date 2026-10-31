@@ -41,12 +41,18 @@ func TestCLIReadAndArchive(t *testing.T) {
 }
 func TestReaderWorksWithoutNode(t *testing.T) {
 	bun, err := exec.LookPath("bun")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	axi, err := exec.LookPath("tasks-axi")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	dir := t.TempDir()
 	for name, target := range map[string]string{"bun": bun, "tasks-axi": axi} {
-		if err := os.Symlink(target, filepath.Join(dir, name)); err != nil { t.Fatal(err) }
+		if err := os.Symlink(target, filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	t.Setenv("PATH", dir)
 	tasks, err := readBatch("backlog.md", []byte("## Queued\n- [ ] sample - Example task\n"), nil)

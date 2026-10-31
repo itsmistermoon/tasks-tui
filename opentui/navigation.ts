@@ -129,11 +129,16 @@ export type InspectorTab = typeof inspectorTabs[number];
 export function isInspectorTab(mode: string): mode is InspectorTab {
   return inspectorTabs.some((tab) => tab === mode);
 }
-export type NavigationMode = "browse" | "list" | InspectorTab | "help" | "add";
+export const modals = ["help", "add", "actions", "input", "confirm"] as const;
+export type Modal = typeof modals[number];
+export function isModal(mode: string): mode is Modal {
+  return modals.some((modal) => modal === mode);
+}
+export type NavigationMode = "browse" | "list" | InspectorTab | Modal;
 export type NavigationState = {
   selected: string; opened: Task | null; inspectorMode: InspectorTab;
   inspecting: boolean; expanded: boolean; mode: NavigationMode;
-  modalReturnMode: Exclude<NavigationMode, "help" | "add">;
+  modalReturnMode: Exclude<NavigationMode, Modal>;
   cardsFocused: boolean; cardIndex: number;
 };
 export type NavigationAction =
@@ -142,7 +147,7 @@ export type NavigationAction =
   | { type: "focus"; mode: "browse" | "list" | InspectorTab }
   | { type: "expand" }
   | { type: "resize"; width: number }
-  | { type: "modal"; modal: "help" | "add" }
+  | { type: "modal"; modal: Modal }
   | { type: "dismiss" }
   | { type: "cards"; focused: boolean; index?: number }
   | { type: "close"; width: number; task: Task | null };
@@ -177,7 +182,7 @@ export function transitionNavigation(state: NavigationState, action: NavigationA
     next.mode = action.mode;
     if (isInspectorTab(action.mode)) next.inspectorMode = action.mode;
   } else if (action.type === "modal") {
-    if (next.mode !== "help" && next.mode !== "add") next.modalReturnMode = next.mode;
+    if (!isModal(next.mode)) next.modalReturnMode = next.mode;
     next.mode = action.modal;
   } else if (action.type === "dismiss") next.mode = next.modalReturnMode;
   else if (action.type === "cards") {

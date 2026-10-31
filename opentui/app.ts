@@ -21,6 +21,7 @@ import {
   transitionNavigation,
   inspectorTabs,
   isInspectorTab,
+  isModal,
   type NavigationAction,
   type FocusState,
   type NavigationState,
@@ -34,6 +35,7 @@ import { SnapshotClient, snapshotCachePath } from "./snapshot-client";
 import { footerHints, helpContent, helpDimensions, type HelpPanel } from "./help";
 import { parseArgs, resolveTask } from "./cli";
 import { taskListCountLabel } from "./task-list-count";
+import { taskActions, commandArgs, formatCommand, runTasksAxi, type TaskAction, type ActionResult } from "./actions";
 import {
   icons,
   status,
@@ -55,7 +57,7 @@ import {
 const cli = parseArgs(process.argv.slice(2));
 if (process.argv.slice(2).some((x) => x === "--help" || x === "-h")) {
   console.log(
-    "Usage: tasks-tui [--task <id>] [backlog.md | directory ...]\nRead-only task viewer using OpenTUI. Press ? for help.",
+    "Usage: tasks-tui [--task <id>] [backlog.md | directory ...]\nTask viewer and manager for tasks-axi backlogs using OpenTUI. Press ? for help.",
   );
   process.exit(0);
 }
@@ -81,7 +83,7 @@ const save = async () => {
 };
 const renderer = await createCliRenderer({ exitOnCtrlC: true, useMouse: false });
 const sidebarWidth = 25;
-const layout = () => panelLayout(renderer.width, navigation.mode === "help" || navigation.mode === "add" ? navigation.modalReturnMode : navigation.mode, navigation.cardsFocused, navigation.inspecting, navigation.expanded);
+const layout = () => panelLayout(renderer.width, isModal(navigation.mode) ? navigation.modalReturnMode : navigation.mode, navigation.cardsFocused, navigation.inspecting, navigation.expanded);
 const showInspector = () => layout().inspector;
 const hasSidebar = () => layout().sidebar;
 const contentWidth = () =>
@@ -127,7 +129,6 @@ let data: Snapshot = { tasks: [], sources: [], errors: [], failed: [] },
   navScrollTop = 0,
   input: InputRenderable | null = null,
   searchText = "",
-  loading = false,
   historyText = "",
   addPath = "",
   linkError = "",
@@ -139,6 +140,14 @@ let data: Snapshot = { tasks: [], sources: [], errors: [], failed: [] },
   sections: { id: string; name: string }[] = [];
 let taskLookupPending = !!cli.taskId, taskLookupWarning = "";
 let showingCachedSnapshot = false;
+let actionTask: Task | null = null,
+  actionMenu: TaskAction[] = [],
+  actionIndex = 0,
+  actionChoice: TaskAction | null = null,
+  actionValue = "",
+  actionResult: ActionResult | null = null,
+  actionRunning = false,
+  actedKey = "";
 let helpPanel: HelpPanel = "browse";
 const text = (
   id: string,
@@ -264,7 +273,7 @@ function render(underlay = false) {
   input = null;
   const frame = box("frame", { width: "100%", height: "100%" });
   renderer.root.add(frame);
-  if (viewingMode === "add" || viewingMode === "help") {
+  if (isModal(viewingMode)) {
     const overlayMode = viewingMode;
     render(true);
     for (const id of ["panel", "list-panel", "nav"]) {
@@ -272,9 +281,15 @@ function render(underlay = false) {
       if (background instanceof BoxRenderable)
         background.borderColor = inactiveBorder;
     }
+    const modalSize = (width: number, height: number) => ({ width: Math.max(1, Math.min(renderer.width - 2, width)), height: Math.max(3, Math.min(renderer.height - 2, height)) });
+    const command = actionTask && actionChoice ? formatCommand(commandArgs(actionChoice, actionTask, actionValue)) : "";
     const size = overlayMode === "help"
       ? helpDimensions(helpPanel, renderer.width, renderer.height)
-      : { width: Math.max(1, Math.min(renderer.width - 2, 64)), height: Math.max(3, Math.min(renderer.height - 2, 9)) };
+      : overlayMode === "actions"
+        ? modalSize(64, actionMenu.length + 6)
+        : overlayMode === "confirm"
+          ? modalSize(76, Math.ceil(Bun.stringWidth(command) / 70) + 7)
+          : modalSize(64, 9);
     const { width, height } = size;
     const p = box("modal", {
       position: "absolute",
@@ -291,7 +306,7 @@ function render(underlay = false) {
       shouldFill: true,
     });
     renderer.root.add(p);
-    const modalTitle = line("modal-title", overlayMode === "help" ? "help" : "add source", activeBorder);
+    const modalTitle = line("modal-title", overlayMode === "help" ? "help" : overlayMode === "add" ? "add source" : overlayMode === "actions" ? `actions · ${actionTask?.Data.id}` : `${actionChoice?.label} · ${actionTask?.Data.id}`, activeBorder);
     modalTitle.attributes = 1;
     p.add(modalTitle);
     p.add(line("modal-title-gap", " ", RGBA.fromIndex(8)));
@@ -323,6 +338,45 @@ function render(underlay = false) {
       field.focus();
       p.add(box("add-spacer", { flexGrow: 1, minHeight: 1 }));
       p.add(keybindBar("add-hint", ["↵ add", "esc back"], { paddingRight: 0 }));
+    } else if (overlayMode === "actions") {
+      const keyWidth = Math.max(1, Math.min(renderer.width - 2, 64) - 4);
+      actionMenu.forEach((action, i) => {
+        const row = box("action-" + i, { flexDirection: "row", width: "100%", height: 1, backgroundColor: selectionBackground, shouldFill: i === actionIndex });
+        const label = line("action-label-" + i, truncateText((i === actionIndex ? "› " : "  ") + action.label + (action.confirm ? " …" : ""), keyWidth - 3, 1), i === actionIndex ? activeBorder : "#d8d8de");
+        label.flexGrow = 1;
+        row.add(label);
+        row.add(text("action-key-" + i, action.key, "#86aaf5", { width: 2, height: 1, attributes: 1 }));
+        p.add(row);
+      });
+      p.add(box("actions-spacer", { flexGrow: 1, minHeight: 1 }));
+      p.add(keybindBar("actions-hint", ["j/k choose", "↵ run", "esc close"], { paddingRight: 0 }));
+    } else if (overlayMode === "input") {
+      p.add(line("action-input-label", actionChoice?.input?.label || "", "#b8bac5"));
+      const field = new InputRenderable(renderer, {
+        id: "action-input",
+        width: "100%",
+        value: actionValue,
+        backgroundColor: "transparent",
+        focusedBackgroundColor: "transparent",
+      });
+      p.add(field);
+      field.on("input", (value: string) => {
+        actionValue = value;
+      });
+      field.on("enter", () => {
+        if (actionChoice?.confirm) {
+          navigate({ type: "modal", modal: "confirm" });
+          render();
+        } else runAction();
+      });
+      field.focus();
+      p.add(box("action-input-spacer", { flexGrow: 1, minHeight: 1 }));
+      p.add(keybindBar("action-input-hint", [actionChoice?.confirm ? "↵ review" : "↵ run", "esc cancel"], { paddingRight: 0 }));
+    } else if (overlayMode === "confirm") {
+      p.add(line("confirm-label", "tasks-tui will run:", "#b8bac5"));
+      p.add(text("confirm-command", command, "#e8bb65", { width: "100%", wrapMode: "char" }));
+      p.add(box("confirm-spacer", { flexGrow: 1, minHeight: 1 }));
+      p.add(keybindBar("confirm-hint", ["y confirm", "n cancel"], { paddingRight: 0 }));
     } else {
       p.add(text("help-text", helpContent(helpPanel, renderer.width), "#d8d8de", { width: "100%", flexGrow: 1 }));
       const closeHint = box("help-close-row", { flexDirection: "row", justifyContent: "flex-end", width: "100%", height: 1, flexShrink: 0 });
@@ -333,6 +387,15 @@ function render(underlay = false) {
   }
   if (taskLookupWarning)
     frame.add(line("task-lookup-warning", taskLookupWarning, RGBA.fromIndex(3)));
+  if (actionRunning || actionResult)
+    frame.add(
+      text(
+        "action-result",
+        actionRunning ? "running tasks-axi…" : actionResult!.message + "  ·  esc dismiss",
+        actionRunning ? "#858796" : actionResult!.ok ? RGBA.fromIndex(10) : RGBA.fromIndex(9),
+        { width: "100%", flexShrink: 0 },
+      ),
+    );
   if (data.errors.length)
     frame.add(
       line("live", "● STALE  " + data.errors.join(" · "), RGBA.fromIndex(9)),
@@ -886,9 +949,14 @@ function updateSticky() {
   }
 }
 const snapshots = new SnapshotClient(backend, cli.sources, snapshotCachePath(cli.sources, settings.sources));
-async function refresh() {
-  if (loading) return;
-  loading = true;
+let refreshing: Promise<void> | null = null;
+function refresh(): Promise<void> {
+  refreshing ??= readSnapshot().finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
+}
+async function readSnapshot() {
   try {
     const next = await snapshots.read();
     if (renderer.isDestroyed) return;
@@ -909,7 +977,9 @@ async function refresh() {
       }
     }
     const changed = JSON.stringify(data) !== JSON.stringify(next);
-    const detached = navigation.opened && !visible.some((task) => task.Key === navigation.selected) ? next.tasks.find((task) => task.Key === navigation.selected) : undefined;
+    // Keep a task selected after its own action moves it out of the current view.
+    const detachedKey = actedKey === navigation.selected || (navigation.opened && !visible.some((task) => task.Key === navigation.selected)) ? navigation.selected : "";
+    const detached = detachedKey ? next.tasks.find((task) => task.Key === detachedKey) : undefined;
     data = next;
     const hadCachedSnapshot = showingCachedSnapshot;
     showingCachedSnapshot = false;
@@ -928,16 +998,62 @@ async function refresh() {
       }
     }
     if (changed || taskLookupChanged || hadCachedSnapshot) listTasks(detached);
-    if ((changed || taskLookupChanged || hadCachedSnapshot) && focus !== "search" && navigation.mode !== "add" && navigation.mode !== "help")
+    if ((changed || taskLookupChanged || hadCachedSnapshot) && focus !== "search" && !isModal(navigation.mode))
       render();
   } catch (e) {
     if (renderer.isDestroyed) return;
     snapshots.close();
     data.errors = [String(e)];
     if (focus !== "search") render();
-  } finally {
-    loading = false;
   }
+}
+function openActions(task: Task) {
+  actionTask = structuredClone(task);
+  actionMenu = taskActions(task);
+  actionIndex = 0;
+  actionResult = null;
+  if (!actionMenu.length) {
+    actionResult = { ok: false, message: "archived tasks have no actions" };
+    render();
+    return;
+  }
+  navigate({ type: "modal", modal: "actions" });
+  render();
+}
+function chooseAction(action: TaskAction) {
+  actionChoice = action;
+  actionValue = action.input?.initial || "";
+  if (action.input) navigate({ type: "modal", modal: "input" });
+  else if (action.confirm) navigate({ type: "modal", modal: "confirm" });
+  else {
+    runAction();
+    return;
+  }
+  render();
+}
+async function runAction() {
+  const task = actionTask, action = actionChoice;
+  if (!task || !action || actionRunning) return;
+  navigate({ type: "dismiss" });
+  actionRunning = true;
+  render();
+  actionResult = await runTasksAxi(commandArgs(action, task, actionValue));
+  actionRunning = false;
+  if (renderer.isDestroyed) return;
+  // Read after the write even if a refresh started before it.
+  await refreshing;
+  actedKey = task.Key;
+  await refresh();
+  actedKey = "";
+  if (renderer.isDestroyed) return;
+  const updated = data.tasks.find((t) => t.Key === task.Key);
+  if (navigation.opened?.Key === task.Key) {
+    navigate({ type: "select", task: updated || null, reload: true });
+    changes = [];
+    pending = null;
+  }
+  listTasks(updated);
+  render();
 }
 function linkEntries(): { label: string; url?: string; task?: Task }[] {
   if (!navigation.opened) return [];
@@ -1013,10 +1129,35 @@ renderer.keyInput.on("keypress", (key) => {
     render();
     return;
   }
-  if (navigation.mode === "add") {
+  if (navigation.mode === "add" || navigation.mode === "input") {
     if (key.name === "escape") {
       navigate({ type: "dismiss" });
       addPath = "";
+      render();
+    }
+    return;
+  }
+  if (navigation.mode === "actions") {
+    const name = ({ j: "down", k: "up" } as Record<string, string>)[key.sequence] || key.name;
+    if (name === "escape") {
+      navigate({ type: "dismiss" });
+      render();
+    } else if (name === "up" || name === "down") {
+      actionIndex = Math.max(0, Math.min(actionMenu.length - 1, actionIndex + (name === "down" ? 1 : -1)));
+      render();
+    } else {
+      const action = name === "return" ? actionMenu[actionIndex] : actionMenu.find((item) => item.key === key.sequence);
+      if (action) {
+        key.preventDefault();
+        chooseAction(action);
+      }
+    }
+    return;
+  }
+  if (navigation.mode === "confirm") {
+    if (key.name === "y") runAction();
+    else if (key.name === "n" || key.name === "escape") {
+      navigate({ type: "dismiss" });
       render();
     }
     return;
@@ -1071,7 +1212,15 @@ renderer.keyInput.on("keypress", (key) => {
     return;
   }
   if (name === "escape") {
-    if (!isInspectorTab(navigation.mode)) backFromTask();
+    if (actionResult) {
+      actionResult = null;
+      render();
+    } else if (!isInspectorTab(navigation.mode)) backFromTask();
+    return;
+  }
+  if (name === "x") {
+    const task = isInspectorTab(navigation.mode) ? navigation.opened : navigation.mode === "list" ? visible.find((t) => t.Key === navigation.selected) : null;
+    if (task && !actionRunning) openActions(task);
     return;
   }
   if (name === "?") {

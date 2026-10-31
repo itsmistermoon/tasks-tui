@@ -43,6 +43,7 @@ test("footer hints match the focused panel and filter mode", async () => {
   expect(footerHints("list", 160, false)).toContain("enter inspect");
   expect(footerHints("links", 160, false)).toContain("enter open");
   expect(footerHints("detail", 160, false)).toContain("u/i/o tabs");
+  expect(footerHints("list", 160, false)).toContain("x actions");
   expect(footerHints("browse", 160, false)).not.toContain("u/i/o tabs");
   expect(footerHints("list", 160, true)).toEqual(["enter apply", "esc clear"]);
   expect(footerHints("list", 80, false)).toEqual(["? help", "q quit"]);

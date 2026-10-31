@@ -6,7 +6,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"github.com/pelletier/go-toml/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +18,7 @@ type Task struct {
 	Data        map[string]any
 	Source, Key string
 	Archived    bool
+	ArchivedAt  string
 }
 
 func (t Task) Get(k string) string {
@@ -111,8 +111,9 @@ func readBatch(file string, live, archive []byte) ([]Task, error) {
 		return nil, e
 	}
 	var rows []struct {
-		Data     map[string]any
-		Archived bool
+		Data       map[string]any
+		Archived   bool
+		ArchivedAt string
 	}
 	if e = json.Unmarshal(output, &rows); e != nil {
 		return nil, e
@@ -123,119 +124,9 @@ func readBatch(file string, live, archive []byte) ([]Task, error) {
 		if r.Archived {
 			suffix = ":archive:"
 		}
-		out = append(out, Task{Data: r.Data, Source: file, Key: file + suffix + fmt.Sprint(r.Data["id"]), Archived: r.Archived})
+		out = append(out, Task{Data: r.Data, Source: file, Key: file + suffix + fmt.Sprint(r.Data["id"]), Archived: r.Archived, ArchivedAt: r.ArchivedAt})
 	}
 	return out, nil
-}
-
-func archivePath(file string) string {
-	d := filepath.Dir(file)
-	for _, root := range []string{d, filepath.Dir(d)} {
-		b, e := os.ReadFile(filepath.Join(root, ".tasks.toml"))
-		if e != nil {
-			continue
-		}
-		var c struct {
-			Markdown struct{ Path, Archive string }
-		}
-		if toml.Unmarshal(b, &c) == nil && c.Markdown.Archive != "" {
-			p := c.Markdown.Path
-			if p == "" {
-				for _, candidate := range []string{"backlog.md", "data/backlog.md"} {
-					if _, err := os.Stat(filepath.Join(root, candidate)); err == nil {
-						p = candidate
-						break
-					}
-				}
-			}
-			if !filepath.IsAbs(p) {
-				p = filepath.Join(root, p)
-			}
-			if filepath.Clean(p) == file {
-				a := c.Markdown.Archive
-				if !filepath.IsAbs(a) {
-					a = filepath.Join(root, a)
-				}
-				return a
-			}
-		}
-	}
-	return filepath.Join(d, "done-archive.md")
-}
-func resolveSource(p string) string {
-	a, _ := filepath.Abs(p)
-	if st, e := os.Stat(a); e == nil && st.IsDir() {
-		for _, cf := range []string{filepath.Join(a, ".tasks.toml"), filepath.Join(userHome(), ".tasks-axi/config.toml")} {
-			b, e := os.ReadFile(cf)
-			if e != nil {
-				continue
-			}
-			var c struct{ Markdown struct{ Path string } }
-			if toml.Unmarshal(b, &c) == nil && c.Markdown.Path != "" {
-				if filepath.IsAbs(c.Markdown.Path) {
-					return c.Markdown.Path
-				}
-				return filepath.Join(a, c.Markdown.Path)
-			}
-		}
-		for _, f := range []string{"backlog.md", "data/backlog.md"} {
-			p := filepath.Join(a, f)
-			if _, e := os.Stat(p); e == nil {
-				return p
-			}
-		}
-		return filepath.Join(a, "backlog.md")
-	}
-	return a
-}
-func userHome() string { h, _ := os.UserHomeDir(); return h }
-func discover(cwd string) []string {
-	seen := map[string]bool{}
-	var out []string
-	add := func(p string) {
-		p = resolveSource(p)
-		if real, e := filepath.EvalSymlinks(p); e == nil {
-			p = real
-		}
-		if _, e := os.Stat(p); e == nil && !seen[p] {
-			seen[p] = true
-			out = append(out, p)
-		}
-	}
-	if p := os.Getenv("TASKS_AXI_FILE"); p != "" {
-		add(p)
-	} else {
-		add(cwd)
-	}
-	for _, root := range []string{cwd, filepath.Join(userHome(), ".treehouse"), filepath.Join(userHome(), ".fm"), filepath.Join(userHome(), "projects")} {
-		filepath.WalkDir(root, func(p string, d os.DirEntry, e error) error {
-			if e != nil {
-				return nil
-			}
-			if root == userHome() && p != root && d.IsDir() {
-				return filepath.SkipDir
-			}
-			if d.IsDir() {
-				rel, _ := filepath.Rel(root, p)
-				if strings.Count(rel, string(os.PathSeparator)) > 6 {
-					return filepath.SkipDir
-				}
-				switch d.Name() {
-				case "node_modules", ".git", "vendor", ".cache":
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if d.Name() == "backlog.md" {
-				add(p)
-			}
-			if d.Name() == ".tasks.toml" {
-				add(filepath.Dir(p))
-			}
-			return nil
-		})
-	}
-	return out
 }
 
 // History is displayed as original Markdown blocks, without interpreting reserved metadata.

@@ -5,6 +5,7 @@ import {
 } from "@opentui/core";
 import { selectionBackground } from "./panel-theme";
 import { truncateText } from "./truncate";
+import type { Task } from "./tasks";
 
 // Keep the existing scroll container and change only the two affected titles.
 export function selectTask(
@@ -77,6 +78,7 @@ export function selectBrowse(
     const item = scroll.content.findDescendantById(`nav-label-${index}`);
     if (row instanceof BoxRenderable) row.shouldFill = index === activeIndex;
     if (item instanceof TextRenderable) {
+      item.attributes = index === activeIndex ? 1 : 0;
       item.content = truncateText(
         (index === next ? "› " : "  ") + labels[index],
         width,
@@ -91,4 +93,107 @@ export function selectBrowse(
     }
   }
   scroll.scrollChildIntoView(`nav-${next}`);
+}
+
+export type FocusState = {
+  panel: "browse" | "cards" | "list" | "inspector";
+  cardIndex: number;
+  home: boolean;
+  width: number;
+};
+
+export function moveFocus(state: FocusState, direction: "left" | "right" | "down"): FocusState {
+  if (state.panel === "cards") {
+    if (direction === "down") return { ...state, panel: "list" };
+    const next = state.cardIndex + (direction === "right" ? 1 : -1);
+    if (next < 0) return { ...state, panel: "browse" };
+    return { ...state, cardIndex: Math.min(state.width < 150 && state.cardIndex < 4 ? 3 : 5, next) };
+  }
+  if (direction === "down") return state;
+  if (state.panel === "browse" && direction === "right")
+    return state.home ? { ...state, panel: "cards", cardIndex: 0 } : { ...state, panel: "list" };
+  if (state.panel === "list") return { ...state, panel: direction === "left" ? "browse" : "inspector" };
+  if (state.panel === "inspector" && direction === "left") return { ...state, panel: "list" };
+  return state;
+}
+
+export function panelLayout(width: number, mode: string, cardsFocused: boolean, inspecting: boolean, expanded: boolean): { sidebar: boolean; inspector: boolean } {
+  return {
+    sidebar: (mode === "browse" && (width >= 80 || !cardsFocused)) || width >= 150,
+    inspector: !expanded && (width >= 150 || (inspecting && width >= 80 && mode !== "browse")),
+  };
+}
+
+export const inspectorTabs = ["detail", "links", "history"] as const;
+export type InspectorTab = typeof inspectorTabs[number];
+export function isInspectorTab(mode: string): mode is InspectorTab {
+  return inspectorTabs.some((tab) => tab === mode);
+}
+export type NavigationMode = "browse" | "list" | InspectorTab | "help" | "add";
+export type NavigationState = {
+  selected: string; opened: Task | null; inspectorMode: InspectorTab;
+  inspecting: boolean; expanded: boolean; mode: NavigationMode;
+  modalReturnMode: Exclude<NavigationMode, "help" | "add">;
+  cardsFocused: boolean; cardIndex: number;
+};
+export type NavigationAction =
+  | { type: "sync"; tasks: Task[]; width: number; preview: boolean; preserve?: Task }
+  | { type: "select"; task: Task | null; mode?: "list" | "inspector"; reload?: boolean }
+  | { type: "focus"; mode: "browse" | "list" | InspectorTab }
+  | { type: "expand" }
+  | { type: "resize"; width: number }
+  | { type: "modal"; modal: "help" | "add" }
+  | { type: "dismiss" }
+  | { type: "cards"; focused: boolean; index?: number }
+  | { type: "close"; width: number; task: Task | null };
+
+export function transitionNavigation(state: NavigationState, action: NavigationAction): NavigationState {
+  let next = { ...state };
+  const select = (task: Task | null, open: boolean, reload = false) => {
+    const changed = state.selected !== (task?.Key || "");
+    next.selected = task?.Key || "";
+    if (changed || (open && (!state.opened || reload)) || !task) {
+      next.opened = task && open ? structuredClone(task) : null;
+      next.inspecting = !!next.opened;
+      if (changed || !task) next.inspectorMode = "detail";
+      if (changed) {
+        next.expanded = false;
+        if (isInspectorTab(next.modalReturnMode))
+          next.modalReturnMode = task && open ? "detail" : "list";
+      }
+      if (isInspectorTab(next.mode) && changed)
+        next.mode = task && open ? next.inspectorMode : "list";
+    }
+  };
+  if (action.type === "sync") {
+    const task = action.tasks.find((item) => item.Key === state.selected) || action.preserve || action.tasks[0] || null;
+    const open = !!task && (state.inspecting || (action.preview && action.width >= 80));
+    if (task?.Key !== state.selected || (!state.opened && open)) select(task, open);
+  } else if (action.type === "select") {
+    select(action.task, !!action.task, action.reload);
+    if (action.mode === "list") next.mode = "list";
+    if (action.mode === "inspector" && action.task) next.mode = next.inspectorMode;
+  } else if (action.type === "focus") {
+    next.mode = action.mode;
+    if (isInspectorTab(action.mode)) next.inspectorMode = action.mode;
+  } else if (action.type === "modal") {
+    if (next.mode !== "help" && next.mode !== "add") next.modalReturnMode = next.mode;
+    next.mode = action.modal;
+  } else if (action.type === "dismiss") next.mode = next.modalReturnMode;
+  else if (action.type === "cards") {
+    next.cardsFocused = action.focused;
+    if (action.index !== undefined) next.cardIndex = action.index;
+  } else if (action.type === "expand") next.expanded = !next.expanded;
+  else if (action.type === "resize" && action.width >= 150) next.expanded = false;
+  else if (action.type === "close") {
+    if (action.width >= 150) {
+      if (!next.opened && action.task?.Key === next.selected) select(action.task, true);
+    } else {
+      next.opened = null;
+      next.inspecting = false;
+    }
+    next.mode = "list";
+  }
+  if (!isInspectorTab(next.mode)) next.expanded = false;
+  return next;
 }

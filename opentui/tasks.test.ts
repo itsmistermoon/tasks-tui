@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { countTasks, filterTasks, status, type Task } from "./tasks";
+import { countTasks, filterTasks, recentTasks, status, type Task } from "./tasks";
 
 const task = (id: string, state: string, extra: Partial<Task> = {}): Task => ({
   Key: id,
@@ -33,7 +33,7 @@ test("status views distinguish active, held, blocked, done and archived work", (
   ).toBe("Held");
 });
 
-test("search reaches completed and archived data regardless of active filters", () => {
+test("filter respects the selected source and status", () => {
   const tasks = [
     task("first", "queued"),
     task("finished", "done", {
@@ -47,7 +47,8 @@ test("search reaches completed and archived data regardless of active filters", 
       source: "/different",
       group: "status:Queued",
     }).map((t) => t.Key),
-  ).toEqual(["finished"]);
+  ).toEqual([]);
+  expect(filterTasks(tasks, { ...filters, query: "SEARCH TERM", group: "status:Done" }).map((t) => t.Key)).toEqual(["finished"]);
 });
 
 test("counts every displayed status and totals tasks by backlog", () => {
@@ -98,4 +99,16 @@ test("counts every displayed status and totals tasks by backlog", () => {
       },
     },
   });
+});
+
+
+test("recent tasks use closure and archive dates, with undated entries last", () => {
+  const tasks = [
+    task("undated", "done"),
+    task("closed-old", "done", { Data: { state: "done", closed: "2025-01-01", created: "2026-01-01" } }),
+    task("closed-new", "done", { Data: { state: "done", closed: "2026-01-01" } }),
+    task("archived-old", "done", { Archived: true, ArchivedAt: "2024-01-01" }),
+    task("archived-new", "done", { Archived: true, ArchivedAt: "2026-02-01" }),
+  ];
+  expect(recentTasks(tasks, 2).map((t) => t.Key)).toEqual(["closed-new", "closed-old", "archived-new", "archived-old"]);
 });

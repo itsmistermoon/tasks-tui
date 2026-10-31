@@ -19,6 +19,7 @@ const current = tasks(live);
 const blocks = archive.split(/(?=^## Archived \d{4}-\d{2}-\d{2})/m);
 const historical = blocks.flatMap((block) => {
   const lines = block.split(/\r?\n/);
+  const archivedAt = /^## Archived (\d{4}-\d{2}-\d{2})/.exec(lines[0])?.[1] || "";
   const declared =
     /^## Archived \d{4}-\d{2}-\d{2} \((queued|in_flight|done)\)/.exec(
       lines[0],
@@ -37,6 +38,7 @@ const historical = blocks.flatMap((block) => {
   }
   return tasks(source).map((task) => ({
     task,
+    archivedAt,
     unknown: !declared && task.state !== "done",
   }));
 });
@@ -47,12 +49,13 @@ process.stdout.write(
       data: toRow(task, { all: current, full: true }),
       archived: false,
     })),
-    ...historical.map(({ task, unknown }) => ({
+    ...historical.map(({ task, unknown, archivedAt }) => ({
       data: {
         ...toRow(task, { all: historicalTasks, full: true }),
         ...(unknown ? { state: "archived" } : {}),
       },
       archived: true,
+      archivedAt,
     })),
   ]),
 );

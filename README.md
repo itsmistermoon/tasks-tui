@@ -18,7 +18,14 @@ curl -fsSL https://raw.githubusercontent.com/itsmistermoon/tasks-tui/main/instal
 
 The installer downloads a prebuilt release, installs Bun 1.3.14+ when needed, and installs `tasks-axi` using Bun if it is missing. It installs to `~/.local/share/tasks-tui`, links `tasks-tui` and, when installed, `tasks-axi` into `~/.local/bin`, and adds the command and Bun directories to your shell profile. Open a new shell after installation. Set `TASKS_TUI_BIN_DIR` to choose another absolute directory for the commands.
 
-The latest release must contain the prebuilt archives; v0.2.0 does not include them.
+Alternatively, install with Homebrew (available after the first release containing the prebuilt archives):
+
+```sh
+brew tap itsmistermoon/tasks-tui https://github.com/itsmistermoon/tasks-tui
+brew install itsmistermoon/tasks-tui/tasks-tui
+```
+
+Homebrew installs Bun and Node as dependencies. The release archive includes a private, pinned copy of `tasks-axi` for the viewer; it does not alter a globally installed `tasks-axi`.
 
 Start the viewer from any directory:
 
@@ -116,3 +123,5 @@ go vet ./...
 ```
 
 The OpenTUI frontend lives in `opentui/`. The Go backend discovers sources, reads snapshots, serves archived note history, and provides task counts.
+
+The release workflow builds all four archives and updates the Homebrew formula on `main` with their SHA-256 checksums using `GITHUB_TOKEN`. If `main` is protected, the update fails visibly and the formula must be updated through a pull request.

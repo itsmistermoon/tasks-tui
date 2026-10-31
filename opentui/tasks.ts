@@ -5,6 +5,7 @@ export type Task = {
   Source: string;
   Key: string;
   Archived: boolean;
+  ArchivedAt?: string;
 };
 export type Snapshot = {
   tasks: Task[];
@@ -97,6 +98,18 @@ export function countTasks(tasks: Task[]): TaskCounts {
   return result;
 }
 
+export function recentTasks(tasks: Task[], limit = 5): Task[] {
+  return (["Done", "Archived"] as const).flatMap((state) =>
+    tasks.filter((task) => status(task) === state).sort((a, b) => {
+      const date = (task: Task) => {
+        const value = state === "Archived" ? task.ArchivedAt : task.Data.closed;
+        return value && value !== "-" ? String(value) : "";
+      };
+      return date(b).localeCompare(date(a));
+    }).slice(0, limit),
+  );
+}
+
 export function sourceName(path: string): string {
   const parts = path.replace(homedir() + "/", "").split("/");
   if (parts.at(-1) === "backlog.md") parts.pop();
@@ -111,10 +124,7 @@ export function filterTasks(
   const { query, source, group, showDone } = filters;
   return tasks
     .filter((task) => {
-      if (query)
-        return JSON.stringify(task.Data)
-          .toLowerCase()
-          .includes(query.toLowerCase());
+      if (query && !JSON.stringify(task.Data).toLowerCase().includes(query.toLowerCase())) return false;
       if (source && source !== task.Source) return false;
       if (
         !showDone &&

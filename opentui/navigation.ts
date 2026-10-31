@@ -77,6 +77,7 @@ export function selectBrowse(
     const item = scroll.content.findDescendantById(`nav-label-${index}`);
     if (row instanceof BoxRenderable) row.shouldFill = index === activeIndex;
     if (item instanceof TextRenderable) {
+      item.attributes = index === activeIndex ? 1 : 0;
       item.content = truncateText(
         (index === next ? "› " : "  ") + labels[index],
         width,
@@ -91,4 +92,38 @@ export function selectBrowse(
     }
   }
   scroll.scrollChildIntoView(`nav-${next}`);
+}
+
+export type FocusState = {
+  panel: "browse" | "cards" | "list" | "inspector";
+  cardIndex: number;
+  home: boolean;
+  width: number;
+};
+
+export function moveFocus(state: FocusState, direction: "left" | "right" | "down"): FocusState {
+  if (state.panel === "cards") {
+    if (direction === "down") return { ...state, panel: "list" };
+    const next = state.cardIndex + (direction === "right" ? 1 : -1);
+    if (next < 0) return { ...state, panel: "browse" };
+    return { ...state, cardIndex: Math.min(state.width < 150 ? 3 : 5, next) };
+  }
+  if (direction === "down") return state;
+  if (state.panel === "browse" && direction === "right")
+    return state.home ? { ...state, panel: "cards", cardIndex: 0 } : { ...state, panel: "list" };
+  if (state.panel === "list") return { ...state, panel: direction === "left" ? "browse" : "inspector" };
+  if (state.panel === "inspector" && direction === "left") return { ...state, panel: "list" };
+  return state;
+}
+
+export function panelLayout(width: number, mode: string, cardsFocused: boolean, inspecting: boolean, expanded: boolean): { sidebar: boolean; inspector: boolean } {
+  return {
+    sidebar: (mode === "browse" && (width >= 80 || !cardsFocused)) || width >= 150,
+    inspector: !expanded && (width >= 150 || (inspecting && width >= 80 && mode !== "browse")),
+  };
+}
+
+export type InspectorTab = "detail" | "links" | "history";
+export function tabAfterTaskSelection(previous: string | undefined, next: string, tab: InspectorTab): InspectorTab {
+  return previous === next ? tab : "detail";
 }

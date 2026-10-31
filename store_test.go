@@ -176,6 +176,11 @@ func TestArchivedOpenTasksRemainVisible(t *testing.T) {
 	if len(tasks) != 2 {
 		t.Fatalf("expected both archived tasks, got %#v", tasks)
 	}
+	for _, task := range tasks {
+		if task.ArchivedAt != "2026-10-01" {
+			t.Fatalf("archive date missing: %#v", task)
+		}
+	}
 }
 
 func TestArchiveConfiguredForDiscoveredBacklog(t *testing.T) {

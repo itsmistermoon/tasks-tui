@@ -29,23 +29,8 @@ func (session *snapshotSession) snapshot(args []string, output io.Writer) error 
 	if b, e := os.ReadFile(settingsPath()); e == nil {
 		json.Unmarshal(b, &c)
 	}
-	seen := map[string]bool{}
 	r := snapshotResult{Tasks: []Task{}, Errors: []string{}, Sources: []string{}, Failed: []string{}}
-	paths := append(append(c.Sources, discover(cwd)...), args...)
-	for path := range session.known {
-		if _, err := os.Stat(path); err != nil {
-			paths = append(paths, path)
-		}
-	}
-	for _, path := range paths {
-		path = resolveSource(path)
-		if real, e := filepath.EvalSymlinks(path); e == nil {
-			path = real
-		}
-		if seen[path] {
-			continue
-		}
-		seen[path] = true
+	for _, path := range sourcePaths(cwd, c.Sources, args, session.known) {
 		r.Sources = append(r.Sources, path)
 		session.known[path] = true
 		tasks, e := session.store.Load(path)

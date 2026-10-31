@@ -16,20 +16,26 @@ import {
   navigationTarget,
   selectBrowse,
   restoreTaskViewport,
+  moveFocus,
+  panelLayout,
+  tabAfterTaskSelection,
+  type FocusState,
+  type InspectorTab,
 } from "./navigation";
+import { projectView, type BrowseItem } from "./views";
 import { scrollbarOptions, hideScrollbars } from "./scrollbar";
 import { openLink } from "./links";
 import { matchesDependency } from "./dependencies";
 import { truncateText } from "./truncate";
-import { SnapshotClient } from "./snapshot-client";
-import { helpContent } from "./help";
+import { SnapshotClient, snapshotCachePath } from "./snapshot-client";
+import { helpContent, helpDimensions, type HelpPanel } from "./help";
 import { parseArgs, resolveTask } from "./cli";
 import { taskListCountLabel } from "./task-list-count";
 import {
   icons,
   status,
   sourceName,
-  filterTasks,
+  countTasks,
   taskStatuses,
   type Task,
   type Snapshot,
@@ -58,29 +64,29 @@ const settingsFile = join(
     : process.env.XDG_CONFIG_HOME || join(homedir(), ".config"),
   "tasks-tui/settings.json",
 );
-let settings: any = { sources: [], showDone: false, Source: "", Group: "" };
+let settings: any = { sources: [], showDone: false };
 try {
+  const saved = JSON.parse(await readFile(settingsFile, "utf8"));
   settings = {
-    ...settings,
-    ...JSON.parse(await readFile(settingsFile, "utf8")),
+    sources: Array.isArray(saved.sources) ? saved.sources : [],
+    showDone: !!saved.showDone,
   };
 } catch {}
 const save = async () => {
   await mkdir(dirname(settingsFile), { recursive: true });
   await writeFile(settingsFile, JSON.stringify(settings, null, 2));
 };
-const renderer = await createCliRenderer({ exitOnCtrlC: true });
-const sidebarWidth = 30;
-const showInspector = () => inspecting && !expanded && renderer.width >= 80;
-const hasSidebar = () =>
-  mode === "browse" ||
-  (renderer.width >= 105 && (!inspecting || expanded || renderer.width >= 150));
+const renderer = await createCliRenderer({ exitOnCtrlC: true, useMouse: false });
+const sidebarWidth = 25;
+const layout = () => panelLayout(renderer.width, mode, cardsFocused, inspecting, expanded);
+const showInspector = () => layout().inspector;
+const hasSidebar = () => layout().sidebar;
 const contentWidth = () =>
   Math.max(
     1,
     Math.floor(
-      (renderer.width - (hasSidebar() ? sidebarWidth : 0)) /
-        (showInspector() ? 2 : 1),
+      (renderer.width - (hasSidebar() ? sidebarWidth : 0)) *
+        (showInspector() ? 0.6 : 1),
     ) - 5,
   );
 const categoryHeading = (state: string, count: number) => {
@@ -101,30 +107,23 @@ let inspectorArea: BoxRenderable | null = null,
   inspectorPanel: BoxRenderable | null = null;
 let inspecting = false,
   expanded = false,
-  inspectorMode: "detail" | "links" | "history" = "detail";
-let browseReturnMode: "list" | "detail" | "links" | "history" = "list",
-  browseWasExpanded = false,
-  modalReturnMode: "list" | "browse" | "detail" | "links" | "history" = "list";
+  inspectorMode: InspectorTab = "detail";
+let modalReturnMode: "list" | "browse" | "detail" | "links" | "history" = "list";
 let data: Snapshot = { tasks: [], sources: [], errors: [], failed: [] },
   visible: Task[] = [],
   selected = "",
   query = "",
   mode: "list" | "browse" | "detail" | "help" | "links" | "history" | "add" =
-    "list",
+    "browse",
   focus: "list" | "search" = "list",
   navIndex = 0,
-  navItems: {
-    label: string;
-    source: string;
-    group: string;
-    section?: string;
-  }[] = [],
+  navItems: BrowseItem[] = [],
   opened: Task | null = null,
   pending: Task | null = null,
   changes: string[] = [],
   showDone = !!settings.showDone,
-  source = settings.Source || "",
-  group = settings.Group || "",
+  source = "",
+  group = "home",
   revealSelected = false,
   scroll: ScrollBoxRenderable | null = null,
   taskListScroll: ScrollBoxRenderable | null = null,
@@ -143,6 +142,10 @@ let data: Snapshot = { tasks: [], sources: [], errors: [], failed: [] },
   stickyText: TextRenderable | null = null,
   sections: { id: string; name: string }[] = [];
 let taskLookupPending = !!cli.taskId, taskLookupWarning = "";
+let initialPreviewPending = !cli.taskId;
+let showingCachedSnapshot = false;
+let helpPanel: HelpPanel = "browse";
+let cardsFocused = false, cardIndex = 0;
 const text = (
   id: string,
   content: string,
@@ -159,69 +162,45 @@ const text = (
 const box = (id: string, opts: any = {}) =>
   new BoxRenderable(renderer, { id, flexDirection: "column", ...opts });
 function listTasks() {
-  visible = filterTasks(data.tasks, { query, source, group, showDone });
-  if (!visible.some((task) => task.Key === selected))
+  const projection = projectView(data.tasks, data.sources, { query, source, group, showDone });
+  visible = projection.tasks;
+  navItems = projection.browse;
+  if (!visible.some((task) => task.Key === selected)) {
     selected = visible[0]?.Key || "";
+    if (mode === "list" && inspecting) {
+      opened = visible[0] ? structuredClone(visible[0]) : null;
+      inspectorMode = "detail";
+      pending = null;
+      changes = [];
+    }
+  }
 }
 function nav() {
-  navItems = [
-    { label: "all backlogs", source: "", group: "", section: "sources" },
-    ...data.sources.map((p) => ({
-      label: sourceName(p),
-      source: p,
-      group: "",
-    })),
-    ...taskStatuses.map(
-      (v, i) => ({
-        label: `${icons[v]} ${v.toLowerCase()}`,
-        source,
-        group: `status:${v}`,
-        ...(i === 0 ? { section: "status" } : {}),
-      }),
-    ),
-  ];
-  for (const [k, section] of [
-    ["kind", "types"],
-    ["repo", "repositories"],
-  ]) {
-    const values = [
-      ...new Set(
-        data.tasks.map((t) =>
-          t.Data[k] && t.Data[k] !== "-" ? String(t.Data[k]) : "unspecified",
-        ),
-      ),
-    ].sort();
-    navItems.push(
-      ...values.map((v, i) => ({
-        label: v,
-        source,
-        group: `${k}:${v}`,
-        ...(i === 0 ? { section } : {}),
-      })),
-    );
-  }
   navIndex = Math.min(navIndex, Math.max(0, navItems.length - 1));
 }
 function chooseBrowse(v: { source: string; group: string }) {
   source = v.source;
   group = v.group;
-  settings.Source = source;
-  settings.Group = group;
-  save();
   listTasks();
-  if (inspecting && opened && visible.some((t) => t.Key === opened!.Key)) {
-    selected = opened.Key;
-    mode = inspectorMode;
-    revealSelected = true;
+  expanded = false;
+  mode = "list";
+  if (visible.length) {
+    inspectorMode = tabAfterTaskSelection(opened?.Key, visible[0].Key, inspectorMode);
+    selected = visible[0].Key;
+    opened = structuredClone(visible[0]);
+    inspecting = renderer.width >= 80;
+    pending = null;
+    changes = [];
   } else {
     inspecting = false;
-    expanded = false;
     opened = null;
-    mode = "list";
   }
+  listScroll = 0;
   render();
 }
 function openTask(t: Task) {
+  const nextInspectorMode = tabAfterTaskSelection(opened?.Key, t.Key, inspectorMode);
+  if (renderer.width >= 150) inspecting = true;
   if (mode === "list") listScroll = taskListScroll?.scrollTop || 0;
   else if (mode === "detail" && scroll) scroll.scrollTop = 0;
   if (showInspector() && taskListScroll) {
@@ -237,7 +216,8 @@ function openTask(t: Task) {
   opened = structuredClone(t);
   pending = null;
   changes = [];
-  mode = "detail";
+  inspectorMode = nextInspectorMode;
+  mode = nextInspectorMode;
   focus = "list";
   renderActiveView();
 }
@@ -253,9 +233,8 @@ function backFromTask() {
     render();
   }
 }
-function line(id: string, content: string, fg: any, click?: () => void) {
-  const v = text(id, content, fg, { height: 1, onMouseDown: click });
-  return v;
+function line(id: string, content: string, fg: any) {
+  return text(id, content, fg, { height: 1 });
 }
 function keybindBar(id: string, items: string[], options: any = {}) {
   const bar = box(id, {
@@ -291,8 +270,11 @@ function render() {
     inspectorMode = mode as typeof inspectorMode;
   listTasks();
   nav();
-  const previousMode = lastRenderedMode;
-  if (navScroll && !navScroll.isDestroyed) navScrollTop = navScroll.scrollTop;
+  if (mode !== "browse" || cardsFocused) {
+    const active = navItems.findIndex((item) => item.source === source && item.group === group);
+    if (active >= 0) navIndex = active;
+  }
+  if (navScroll && !navScroll.isDestroyed && lastRenderedMode === "browse") navScrollTop = navScroll.scrollTop;
   if (taskListScroll && !taskListScroll.isDestroyed)
     listScroll = taskListScroll.scrollTop;
   const showingTasks =
@@ -322,14 +304,10 @@ function render() {
       if (background instanceof BoxRenderable)
         background.borderColor = inactiveBorder;
     }
-    const width = Math.max(
-        1,
-        Math.min(renderer.width - 2, overlayMode === "help" ? 72 : 64),
-      ),
-      height = Math.max(
-        3,
-        Math.min(renderer.height - 2, overlayMode === "help" ? 25 : 9),
-      );
+    const size = overlayMode === "help"
+      ? helpDimensions(helpPanel, renderer.width, renderer.height)
+      : { width: Math.max(1, Math.min(renderer.width - 2, 64)), height: Math.max(3, Math.min(renderer.height - 2, 9)) };
+    const { width, height } = size;
     const p = box("modal", {
       position: "absolute",
       left: Math.max(0, Math.floor((renderer.width - width) / 2)),
@@ -345,13 +323,9 @@ function render() {
       shouldFill: true,
     });
     renderer.root.add(p);
-    p.add(
-      line(
-        "modal-title",
-        overlayMode === "help" ? "help" : "add source",
-        activeBorder,
-      ),
-    );
+    const modalTitle = line("modal-title", overlayMode === "help" ? "help" : "add source", activeBorder);
+    modalTitle.attributes = 1;
+    p.add(modalTitle);
     p.add(line("modal-title-gap", " ", RGBA.fromIndex(8)));
     if (overlayMode === "add") {
       p.add(line("add-label", "path to backlog file or directory:", "#b8bac5"));
@@ -381,29 +355,10 @@ function render() {
       p.add(box("add-spacer", { flexGrow: 1, minHeight: 1 }));
       p.add(keybindBar("add-hint", ["↵ add", "esc back"], { paddingRight: 0 }));
     } else {
-      const sc = hideScrollbars(
-        new ScrollBoxRenderable(renderer, {
-          scrollbarOptions,
-          id: "help-scroll",
-          flexGrow: 1,
-        }),
-      );
-      p.add(sc);
-      scroll = sc;
-      sc.add(text("help-text", helpContent(), "#d8d8de", { width: "100%" }));
-      const back = box("back-help-row", {
-        flexDirection: "row",
-        justifyContent: "flex-end",
-        width: "100%",
-        flexShrink: 0,
-      });
-      p.add(back);
-      back.add(
-        line("back-help", "esc back", "#858796", () => {
-          mode = modalReturnMode;
-          render();
-        }),
-      );
+      p.add(text("help-text", helpContent(helpPanel, renderer.width), "#d8d8de", { width: "100%", flexGrow: 1 }));
+      const closeHint = box("help-close-row", { flexDirection: "row", justifyContent: "flex-end", width: "100%", height: 1, flexShrink: 0 });
+      closeHint.add(line("help-close-hint", "press any key to close", "#858796"));
+      p.add(closeHint);
     }
     return;
   }
@@ -413,36 +368,16 @@ function render() {
     frame.add(
       line("live", "● STALE  " + data.errors.join(" · "), RGBA.fromIndex(9)),
     );
-  const searchRow = box("search-row", { flexDirection: "row", height: 1 });
-  frame.add(searchRow);
-  searchRow.add(
-    text("app-title", " tasks-tui", activeBorder, {
-      width: hasSidebar() ? sidebarWidth : 12,
-      height: 1,
-    }),
-  );
-  searchRow.add(
-    line(
-      "search-label",
-      " search all › ",
-      focus === "search" ? "#d6ad69" : "#858796",
-      () => {
-        mode = "list";
-        focus = "search";
-        render();
-      },
-    ),
-  );
   input = new InputRenderable(renderer, {
     id: "search",
-    width: 40,
+    width: 1,
     value: searchText,
     backgroundColor: "transparent",
     focusedBackgroundColor: "transparent",
     textColor: "#e0e0e4",
     focusedTextColor: "#ffffff",
   });
-  searchRow.add(input);
+
   input.on("input", (value: string) => {
     searchText = value;
     query = value;
@@ -457,29 +392,47 @@ function render() {
     render();
   });
   if (focus === "search") input.focus();
-  frame.add(line("header-gap", " ", RGBA.fromIndex(8)));
+  const renderFooter = () => {
+    const footer = box("footer-row", { flexDirection: "row", width: "100%", height: 1, flexShrink: 0 });
+    frame.add(footer);
+    const location = box("status-bar", { flexDirection: "row", flexGrow: 1, flexBasis: 0, height: 1, paddingLeft: 1 });
+    footer.add(location);
+    const current = navItems.find((item) => item.source === source && item.group === group);
+    const category = group.startsWith("status:") ? "status" : group.startsWith("kind:") ? "types" : group.startsWith("repo:") ? "repositories" : "sources";
+    location.add(line("breadcrumb", group === "home" ? "home" : `${category} > ${current?.label || "all"}`, focus === "search" ? "#858796" : RGBA.defaultForeground()));
+    if (focus === "search" && input) {
+      location.add(line("filter-prefix", " / ", "#858796"));
+      input.width = 1;
+      input.flexGrow = 1;
+      input.flexShrink = 1;
+      location.add(input);
+      input.focus();
+    }
+    footer.add(keybindBar("footer", renderer.width < 105 ? ["? help", "q quit"] : ["/ filter", "d show done", "a add source", "r refresh", "? help", "q quit"], { width: "auto", flexShrink: 0 }));
+  };
   const area = box("area", { flexDirection: "row", flexGrow: 1 });
   frame.add(area);
-  const wide = renderer.width >= 105;
+  const wide = renderer.width >= 80;
   const side = hasSidebar();
   const split = showInspector();
   const viewMode =
-    inspecting && opened && ["browse", "list"].includes(mode)
+    split && inspecting && opened && ["browse", "list"].includes(mode)
       ? inspectorMode
       : mode;
   if (side) {
     const n = box("nav", {
       border: true,
       borderStyle: "rounded",
-      borderColor: overviewBorder("browse", mode, focus),
+      borderColor: cardsFocused ? inactiveBorder : overviewBorder("browse", mode, focus),
       width: wide ? sidebarWidth : "100%",
       flexGrow: wide ? 0 : 1,
       paddingLeft: 1,
       paddingRight: 1,
     });
     area.add(n);
-    n.add(line("nav-title", "backlogs", activeBorder));
-    n.add(line("nav-title-gap", " ", RGBA.fromIndex(8)));
+    const navTitle = line("nav-title", "tasks-tui", mode === "browse" && !cardsFocused ? activeBorder : "#858796");
+    navTitle.attributes = mode === "browse" && !cardsFocused ? 1 : 0;
+    n.add(navTitle);
     const ns = hideScrollbars(
       new ScrollBoxRenderable(renderer, {
         scrollbarOptions,
@@ -497,16 +450,16 @@ function render() {
       const navRow = box("nav-" + i, {
         width: "100%",
         height: 1,
+        flexDirection: "row",
         backgroundColor: activeBorder,
         shouldFill: v.source === source && v.group === group,
-        onMouseDown: () => chooseBrowse(v),
       });
       navRow.add(
         line(
           "nav-label-" + i,
           truncateText(
             (i === navIndex ? "› " : "  ") + v.label,
-            wide ? sidebarWidth - 4 : Math.max(1, renderer.width - 5),
+            wide ? sidebarWidth - 9 : Math.max(1, renderer.width - 10),
             1,
           ),
           v.source === source && v.group === group
@@ -516,9 +469,12 @@ function render() {
               : "#b8bac5",
         ),
       );
+      const labelNode = navRow.getChildren()[0];
+      if (labelNode) { labelNode.flexGrow = 1; if (labelNode instanceof TextRenderable) labelNode.attributes = v.source === source && v.group === group ? 1 : 0; }
+      if (v.count !== undefined) navRow.add(text("nav-count-" + i, String(v.count).padStart(4), "#858796", { width: 4, height: 1 }));
       ns.add(navRow);
     });
-    if (mode === "browse") {
+    {
       let restored = false;
       const restore = () => {
         if (
@@ -528,8 +484,6 @@ function render() {
           ns.scrollHeight > 0
         ) {
           ns.scrollTop = navScrollTop;
-          if (previousMode !== "browse")
-            ns.scrollChildIntoView("nav-" + navIndex);
           restored = true;
         }
       };
@@ -541,22 +495,40 @@ function render() {
       setTimeout(restore, 0);
     }
     if (mode === "browse" && !wide) {
-      frame.add(keybindBar("foot-browse", ["↑↓ select", "↵ open", "esc back"]));
+      renderFooter();
       return;
     }
   }
+  const contentArea = box("content-area", { flexDirection: "column", flexGrow: 1, flexBasis: 0 });
+  area.add(contentArea);
+  if (group === "home" && (mode !== "browse" || renderer.width >= 80 || cardsFocused)) {
+    const cards = box("status-cards", { flexDirection: "row", width: "100%", height: 4, flexShrink: 0 });
+    contentArea.add(cards);
+    const counts = countTasks(source ? data.tasks.filter((task) => task.Source === source) : data.tasks);
+    const cardStatuses = renderer.width < 150 ? taskStatuses.slice(0, 4) : taskStatuses;
+    cardStatuses.forEach((state, index) => {
+      const card = box(`status-card-${index}`, { border: true, borderStyle: "rounded", borderColor: cardsFocused && cardIndex === index ? activeBorder : inactiveBorder, flexGrow: 1, flexBasis: 0, paddingLeft: 1 });
+      const label = line(`status-card-label-${index}`, state.toLowerCase(), cardsFocused && cardIndex === index ? activeBorder : "#b8bac5");
+      label.attributes = cardsFocused && cardIndex === index ? 1 : 0;
+      card.add(label);
+      card.add(line(`status-card-count-${index}`, String(counts.statuses[state]), colors[state]));
+      cards.add(card);
+    });
+  }
+  const panelArea = box("panels", { flexDirection: "row", flexGrow: 1 });
+  contentArea.add(panelArea);
   if (split) {
     const listPanel = box("list-panel", {
       border: true,
       borderStyle: "rounded",
       borderColor:
-        mode === "list" && focus === "list" ? activeBorder : "#50556c",
+        mode === "list" && focus === "list" && !cardsFocused ? activeBorder : "#50556c",
       paddingLeft: 1,
       paddingRight: 1,
-      flexGrow: 1,
+      flexGrow: 3,
       flexBasis: 0,
     });
-    area.add(listPanel);
+    panelArea.add(listPanel);
     renderTaskList(listPanel, listScroll);
   }
   const p = box("panel", {
@@ -564,64 +536,46 @@ function render() {
     borderStyle: "rounded",
     borderColor:
       ["detail", "history", "links"].includes(viewMode) && opened
-        ? mode === "browse" || mode === "list" || focus === "search"
+        ? mode === "browse" || mode === "list" || focus === "search" || cardsFocused
           ? "#50556c"
           : activeBorder
-        : overviewBorder("list", mode, focus),
+        : split ? inactiveBorder : overviewBorder("list", mode, focus),
     paddingLeft: 1,
     paddingRight: 1,
-    flexGrow: 1,
+    flexGrow: split ? 2 : 1,
     ...(split ? { flexBasis: 0 } : {}),
   });
-  area.add(p);
+  panelArea.add(p);
   if (split) {
-    inspectorArea = area;
+    inspectorArea = panelArea;
     inspectorPanel = p;
   }
   if (opened && ["detail", "history", "links"].includes(viewMode)) {
     populateTaskPanel(p, viewMode, oldScroll);
+  } else if (split) {
+    p.add(line("inspector-empty", "select a task to inspect", "#858796"));
   } else {
     renderTaskList(p, oldScroll);
   }
-  const footerItems = [
-    "i inspect",
-    "b browse",
-    "/ search",
-    "d show done",
-    "a add source",
-    "r refresh",
-    "? help",
-    "q quit",
-  ];
-  if (renderer.width >= 105) {
-    const footer = box("footer-row", {
-      flexDirection: "row",
-      width: "100%",
-      alignItems: "flex-end",
-      flexShrink: 0,
-    });
-    frame.add(footer);
-    const statusBar = box("status-bar", {
-      flexDirection: "row",
-      width: 20,
-      height: 1,
-      paddingLeft: 1,
-    });
-    footer.add(statusBar);
-    if (!data.errors.length)
-      statusBar.add(line("live", "● live · ", RGBA.fromIndex(2)));
-    statusBar.add(line("readonly", "read only", RGBA.fromIndex(8)));
-    footer.add(
-      keybindBar("footer", footerItems, { width: "auto", flexGrow: 1 }),
-    );
-  } else frame.add(keybindBar("footer", footerItems));
+  renderFooter();
 }
 function populateTaskPanel(
   p: BoxRenderable,
   viewMode: string,
   oldScroll: number,
 ) {
-  if (opened && ["detail", "history", "links"].includes(viewMode))
+  if (opened && ["detail", "history", "links"].includes(viewMode)) {
+    const tabs = box("inspector-tabs", { flexDirection: "row", height: 1 });
+    p.add(tabs);
+    for (const tab of ["detail", "links", "history"] as const) {
+      const active = tab === viewMode;
+      const inspectorFocused = ["detail", "links", "history"].includes(mode) && !cardsFocused && focus !== "search";
+      const tabBox = box("tab-" + tab, { height: 1, backgroundColor: active ? (inspectorFocused ? activeBorder : inactiveBorder) : selectionBackground, shouldFill: true });
+      const label = line("tab-label-" + tab, ` ${tab} `, active ? (inspectorFocused ? "#191a29" : "#e0e0e4") : "#858796");
+      label.attributes = active ? 1 : 0;
+      tabBox.add(label);
+      tabs.add(tabBox);
+    }
     p.add(
       line(
         "task-heading",
@@ -629,6 +583,9 @@ function populateTaskPanel(
         taskBorder(status(opened)),
       ),
     );
+    const taskHeading = p.findDescendantById("task-heading");
+    if (taskHeading instanceof TextRenderable) taskHeading.attributes = ["detail", "links", "history"].includes(mode) && !cardsFocused ? 1 : 0;
+  }
   if (viewMode === "detail" && opened) {
     p.add(line("panel-padding", " ", RGBA.fromIndex(8)));
     if (changes.length)
@@ -637,9 +594,6 @@ function populateTaskPanel(
           "changed",
           "Changed: " + changes.join(", ") + (pending ? "  ·  r reload" : ""),
           "#e8bb65",
-          () => {
-            if (pending) openTask(pending);
-          },
         ),
       );
     scroll = hideScrollbars(
@@ -729,36 +683,6 @@ function populateTaskPanel(
       }
     }
     scroll.scrollTop = oldScroll;
-    p.add(line("controls-gap", " ", RGBA.fromIndex(8)));
-    const controls = box("controls", {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      justifyContent: "flex-end",
-      width: "100%",
-      flexShrink: 0,
-    });
-    p.add(controls);
-    if (inspecting && !expanded)
-      controls.add(
-        line("expand", "e expand · ", "#858796", () => {
-          expanded = true;
-          render();
-        }),
-      );
-    controls.add(
-      line("links", "l links", "#858796", () => {
-        linkError = "";
-        linkIndex = 0;
-        mode = "links";
-        render();
-      }),
-    );
-    controls.add(line("sep-links", " · ", "#858796"));
-    controls.add(line("history", "h history", "#858796", () => showHistory()));
-    controls.add(line("sep-page", " · ", "#858796"));
-    controls.add(line("detail-page", "pgup/pgdn task", "#858796"));
-    controls.add(line("sep-back", " · ", "#858796"));
-    controls.add(line("back", "esc back", "#858796", backFromTask));
   } else if ((viewMode === "links" || viewMode === "history") && opened) {
     const sc = hideScrollbars(
       new ScrollBoxRenderable(renderer, {
@@ -810,93 +734,48 @@ function populateTaskPanel(
             "link-" + i,
             (i === linkIndex ? "› " : "  ") + entry.label,
             i === linkIndex ? activeBorder : RGBA.defaultForeground(),
-            () => activateLink(i),
           ),
         );
       }
     }
-    p.add(line("extra-controls-gap", " ", RGBA.fromIndex(8)));
-    const controls = box("extra-controls", {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      justifyContent: "flex-end",
-      width: "100%",
-      flexShrink: 0,
-    });
-    p.add(controls);
-    if (viewMode === "links" && linkEntries().length)
-      controls.add(line("open-link-hint", "↵ open · ", "#858796"));
-    if (inspecting && !expanded)
-      controls.add(
-        line("expand-extra", "e expand · ", "#858796", () => {
-          expanded = true;
-          render();
-        }),
-      );
-    controls.add(
-      line("extra-detail", "t detail · ", "#858796", () => {
-        mode = "detail";
-        render();
-      }),
-    );
-    if (viewMode === "links")
-      controls.add(
-        line("extra-history", "h history · ", "#858796", () => showHistory()),
-      );
-    else
-      controls.add(
-        line("extra-links", "l links · ", "#858796", () => {
-          linkError = "";
-          linkIndex = 0;
-          mode = "links";
-          render();
-        }),
-      );
-    controls.add(line("extra-page-hint", "pgup/pgdn task · ", "#858796"));
-    controls.add(line("extra-back", "esc back", "#858796", backFromTask));
+
   }
 }
 function renderActiveView() {
-  if (inspecting && ["detail", "links", "history"].includes(mode))
-    inspectorMode = mode as typeof inspectorMode;
-  if (
-    showInspector() &&
-    inspectorArea &&
-    inspectorPanel &&
-    !inspectorArea.isDestroyed
-  ) {
-    const area = inspectorArea;
-    area.remove(inspectorPanel);
-    inspectorPanel.destroyRecursively();
-    scroll = null;
-    const panel = box("panel", {
-      border: true,
-      borderStyle: "rounded",
-      borderColor: activeBorder,
-      paddingLeft: 1,
-      paddingRight: 1,
-      flexGrow: 1,
-      flexBasis: 0,
-    });
-    area.add(panel);
-    inspectorPanel = panel;
-    populateTaskPanel(panel, mode, 0);
-  } else render();
+  if (!showInspector() || !inspectorArea || !inspectorPanel || inspectorArea.isDestroyed || !opened) { render(); return; }
+  if (inspecting && ["detail", "links", "history"].includes(mode)) inspectorMode = mode as typeof inspectorMode;
+  const listPanel = renderer.root.findDescendantById("list-panel");
+  if (listPanel instanceof BoxRenderable) listPanel.borderColor = mode === "list" && !cardsFocused ? activeBorder : inactiveBorder;
+  const heading = renderer.root.findDescendantById("panel-heading");
+  if (heading instanceof TextRenderable) {
+    const focused = mode === "list" && !cardsFocused && focus !== "search";
+    heading.fg = focused ? activeBorder : "#858796";
+    heading.attributes = focused ? 1 : 0;
+  }
+  inspectorArea.remove(inspectorPanel);
+  inspectorPanel.destroyRecursively();
+  scroll = null;
+  const panel = box("panel", { border: true, borderStyle: "rounded", borderColor: ["detail", "links", "history"].includes(mode) && !cardsFocused ? activeBorder : inactiveBorder, paddingLeft: 1, paddingRight: 1, flexGrow: 2, flexBasis: 0 });
+  inspectorArea.add(panel);
+  inspectorPanel = panel;
+  populateTaskPanel(panel, mode === "list" || mode === "browse" ? inspectorMode : mode, 0);
 }
 function renderTaskList(p: BoxRenderable, oldScroll: number) {
   p.add(
     line(
       "panel-heading",
-      (source ? sourceName(source) : "all backlogs") +
+      (group === "home" ? "home · recent activity" : source ? sourceName(source) : "all backlogs") +
         " · " +
         taskListCountLabel(
           data.tasks,
           visible.length,
           Boolean(source || group || query),
         ),
-      activeBorder,
+      mode === "list" && !cardsFocused ? activeBorder : "#858796",
     ),
   );
+  const heading = p.findDescendantById("panel-heading");
+  if (heading instanceof TextRenderable) heading.attributes = mode === "list" && !cardsFocused ? 1 : 0;
   p.add(line("panel-padding", " ", RGBA.fromIndex(8)));
   const sticky = text("sticky", "", "#858796", { height: 1 });
   stickyText = sticky;
@@ -941,7 +820,6 @@ function renderTaskList(p: BoxRenderable, oldScroll: number) {
     const item = box("task-" + i, {
       flexDirection: "row",
       width: "100%",
-      onMouseDown: () => openTask(t),
     });
     scroll!.add(item);
     const body = box("body-" + i, { flexGrow: 1 });
@@ -1036,7 +914,17 @@ function updateSticky() {
       stickyText.content = v;
   }
 }
-const snapshots = new SnapshotClient(backend, cli.sources);
+function initializePreview() {
+  if (!initialPreviewPending || renderer.width < 150) return;
+  listTasks();
+  if (visible[0]) {
+    selected = visible[0].Key;
+    opened = structuredClone(visible[0]);
+    inspecting = true;
+    initialPreviewPending = false;
+  }
+}
+const snapshots = new SnapshotClient(backend, cli.sources, snapshotCachePath(cli.sources, settings.sources));
 async function refresh() {
   if (loading) return;
   loading = true;
@@ -1045,7 +933,15 @@ async function refresh() {
     if (renderer.isDestroyed) return;
     if (opened) {
       const t = next.tasks.find((x) => x.Key === opened!.Key);
-      if (t) {
+      if (showingCachedSnapshot && t) {
+        opened = structuredClone(t);
+        changes = [];
+        pending = null;
+      } else if (showingCachedSnapshot && !t) {
+        opened = null;
+        inspecting = false;
+        initialPreviewPending = true;
+      } else if (t) {
         changes = Object.keys({ ...opened.Data, ...t.Data }).filter(
           (k) => JSON.stringify(opened!.Data[k]) !== JSON.stringify(t.Data[k]),
         );
@@ -1057,11 +953,15 @@ async function refresh() {
     }
     const changed = JSON.stringify(data) !== JSON.stringify(next);
     data = next;
+    const hadCachedSnapshot = showingCachedSnapshot;
+    showingCachedSnapshot = false;
     let taskLookupChanged = false;
     if (taskLookupPending) {
       const task = resolveTask(data.tasks, cli.taskId);
       if (task) {
         taskLookupPending = false;
+        source = "";
+        group = `status:${status(task)}`;
         openTask(task);
       } else if (data.failed.length === 0) {
         taskLookupPending = false;
@@ -1069,7 +969,8 @@ async function refresh() {
         taskLookupChanged = true;
       }
     }
-    if ((changed || taskLookupChanged) && focus !== "search" && mode !== "add" && mode !== "help")
+    initializePreview();
+    if ((changed || taskLookupChanged || hadCachedSnapshot) && focus !== "search" && mode !== "add" && mode !== "help")
       render();
   } catch (e) {
     if (renderer.isDestroyed) return;
@@ -1127,7 +1028,7 @@ async function showHistory() {
   );
   const result = await new Response(p.stdout).text();
   const failed = await p.exited;
-  if (renderer.isDestroyed || opened?.Key !== key || mode !== "history") return;
+  if (renderer.isDestroyed || opened?.Key !== key) return;
   historyText = failed
     ? "unable to read archived notes"
     : result.trim() === "No archived note versions found for this task."
@@ -1135,8 +1036,7 @@ async function showHistory() {
       : result.trim() === "No archived note versions available."
         ? "no archived note versions available"
         : result;
-  mode = "history";
-  renderActiveView();
+  if (mode === "history") renderActiveView();
 }
 renderer.keyInput.on("keypress", (key) => {
   if (focus === "search") {
@@ -1150,15 +1050,8 @@ renderer.keyInput.on("keypress", (key) => {
     return;
   }
   if (mode === "help") {
-    if (key.name === "?" || key.name === "escape" || key.name === "q") {
-      mode = modalReturnMode;
-      render();
-    } else if (scroll) {
-      if (key.name === "down") scroll.scrollBy(1);
-      if (key.name === "up") scroll.scrollBy(-1);
-      if (key.name === "pagedown") scroll.scrollBy(10);
-      if (key.name === "pageup") scroll.scrollBy(-10);
-    }
+    mode = modalReturnMode;
+    render();
     return;
   }
   if (mode === "add") {
@@ -1169,157 +1062,149 @@ renderer.keyInput.on("keypress", (key) => {
     }
     return;
   }
-  if (key.name === "q") {
+  const name = ({ j: "down", k: "up", h: "left", l: "right" } as Record<string, string>)[key.name] || key.name;
+  if ((name === "left" || name === "right" || (cardsFocused && name === "down"))) {
+    const panel: FocusState["panel"] = cardsFocused ? "cards" : mode === "browse" ? "browse" : mode === "list" ? "list" : "inspector";
+    const next = moveFocus({ panel, cardIndex, home: group === "home", width: renderer.width }, name);
+    if (panel === "browse" && next.panel !== "browse") {
+      const active = navItems.findIndex((item) => item.source === source && item.group === group);
+      if (active >= 0) navIndex = active;
+    }
+    cardIndex = next.cardIndex;
+    cardsFocused = next.panel === "cards";
+    if (next.panel === "inspector" && panel === "list") {
+      const task = visible.find((t) => t.Key === selected);
+      if (task) { inspecting = true; openTask(task); return; }
+    } else if (next.panel === "browse") mode = "browse";
+    else if (next.panel === "list") {
+      mode = "list";
+      const task = visible.find((t) => t.Key === selected);
+      if (task && renderer.width >= 80) {
+        inspectorMode = tabAfterTaskSelection(opened?.Key, task.Key, inspectorMode);
+        opened = structuredClone(task);
+        inspecting = true;
+      }
+    }
+    render();
+    return;
+  }
+  if (cardsFocused) {
+    if (name === "return") {
+      cardsFocused = false;
+      chooseBrowse({ source, group: `status:${taskStatuses[cardIndex]}` });
+      return;
+    }
+    if (name === "escape") { cardsFocused = false; mode = "browse"; render(); return; }
+    if (!["a", "/", "?", "q", "d", "r"].includes(name)) return;
+    if (["a", "/"].includes(name)) cardsFocused = false;
+  }
+  if (group === "home" && name === "up" && ((mode === "list" && visible.findIndex((t) => t.Key === selected) <= 0) || (["detail", "history"].includes(mode) && (scroll?.scrollTop || 0) === 0) || (mode === "links" && linkIndex === 0))) {
+    cardsFocused = true;
+    render();
+    return;
+  }
+  if (["detail", "links", "history"].includes(mode) && ["u", "i", "o"].includes(name) && opened) {
+    inspecting = true;
+    if (name === "o") showHistory();
+    else { mode = name === "u" ? "detail" : "links"; linkIndex = 0; linkError = ""; render(); }
+    return;
+  }
+  if (name === "q") {
     renderer.destroy();
     return;
   }
-  if (key.name === "escape") {
-    if (mode === "browse" && inspecting) {
-      mode = inspectorMode;
-      render();
-    } else backFromTask();
+  if (name === "escape") {
+    if (!["detail", "links", "history"].includes(mode)) backFromTask();
     return;
   }
-  if (key.name === "?") {
+  if (name === "?") {
+    helpPanel = cardsFocused ? "cards" : mode as HelpPanel;
     modalReturnMode = mode as typeof modalReturnMode;
     mode = "help";
     render();
     return;
   }
-  if (key.name === "/") {
+  if (name === "/") {
     key.preventDefault();
     mode = "list";
     focus = "search";
     render();
     return;
   }
-  if (key.name === "b") {
-    if (mode === "browse") {
-      mode = browseReturnMode;
-      expanded = browseWasExpanded;
-    } else {
-      browseReturnMode = mode as typeof browseReturnMode;
-      browseWasExpanded = expanded;
-      if (inspecting && ["detail", "links", "history"].includes(mode))
-        inspectorMode = mode as typeof inspectorMode;
-      expanded = false;
-      mode = "browse";
-    }
-    render();
-    return;
-  }
-  if (key.name === "a") {
+  if (name === "a") {
     key.preventDefault();
     modalReturnMode = mode as typeof modalReturnMode;
     mode = "add";
     render();
     return;
   }
-  if (key.name === "i" && inspecting) {
-    inspecting = false;
-    expanded = false;
-    opened = null;
-    if (mode !== "browse") mode = "list";
-    render();
-    return;
-  }
-  if (key.name === "d") {
+  if (name === "d") {
     showDone = !showDone;
     settings.showDone = showDone;
     save();
     render();
     return;
   }
-  if (key.name === "r") {
+  if (name === "r") {
     if (pending) openTask(pending);
     else refresh();
     return;
   }
   if (
     inspecting &&
-    !expanded &&
+    renderer.width < 150 &&
     ["detail", "links", "history"].includes(mode) &&
-    key.name === "e"
+    name === "e"
   ) {
-    expanded = true;
+    expanded = !expanded;
     render();
     return;
   }
   if (
     ["detail", "links", "history"].includes(mode) &&
-    (key.name === "pageup" || key.name === "pagedown")
+    (name === "pageup" || name === "pagedown")
   ) {
     const current = visible.findIndex((t) => t.Key === opened?.Key);
-    const next = current + (key.name === "pagedown" ? 1 : -1);
+    const next = current + (name === "pagedown" ? 1 : -1);
     if (current >= 0 && visible[next]) {
-      const currentMode = mode;
       if (showInspector() && taskListScroll) {
         selectTask(taskListScroll, current, next);
         listScroll = taskListScroll.scrollTop;
         updateSticky();
         revealSelected = false;
       } else revealSelected = true;
-      if (currentMode === "detail") openTask(visible[next]);
-      else {
-        selected = visible[next].Key;
-        opened = structuredClone(visible[next]);
-        pending = null;
-        changes = [];
-        if (scroll) scroll.scrollTop = 0;
-        if (currentMode === "history") showHistory();
-        else {
-          linkIndex = 0;
-          linkError = "";
-          renderActiveView();
-        }
-      }
+      openTask(visible[next]);
     }
     return;
   }
-  if (["links", "history"].includes(mode) && key.name === "t") {
-    mode = "detail";
-    render();
-    return;
-  }
-  if (["detail", "history"].includes(mode) && key.name === "l") {
-    linkError = "";
-    linkIndex = 0;
-    mode = "links";
-    render();
-    return;
-  }
-  if (["detail", "links"].includes(mode) && key.name === "h") {
-    showHistory();
-    return;
-  }
   if (mode === "links") {
-    if (key.name === "up" || key.name === "down") {
+    if (name === "up" || name === "down") {
       linkIndex = Math.max(
         0,
         Math.min(
           linkEntries().length - 1,
-          linkIndex + (key.name === "down" ? 1 : -1),
+          linkIndex + (name === "down" ? 1 : -1),
         ),
       );
       render();
       scroll?.scrollChildIntoView("link-" + linkIndex);
       return;
     }
-    if (key.name === "return") {
+    if (name === "return") {
       activateLink(linkIndex);
       return;
     }
   }
   if (mode === "browse") {
     if (
-      ["up", "down", "home", "end", "pageup", "pagedown"].includes(key.name)
+      ["up", "down", "home", "end", "pageup", "pagedown"].includes(name)
     ) {
       const previous = navIndex;
       navIndex = navigationTarget(
         navScroll,
         navIndex,
         navItems.length,
-        key.name,
+        name,
         "nav",
       );
       selectBrowse(
@@ -1327,52 +1212,60 @@ renderer.keyInput.on("keypress", (key) => {
         previous,
         navIndex,
         navItems.map((item) => item.label),
-        renderer.width >= 105
-          ? sidebarWidth - 4
-          : Math.max(1, renderer.width - 5),
+        renderer.width >= 80
+          ? sidebarWidth - 9
+          : Math.max(1, renderer.width - 10),
         navItems.findIndex(
           (item) => item.source === source && item.group === group,
         ),
       );
       navScrollTop = navScroll?.scrollTop || 0;
       return;
-    } else if (key.name === "return") {
+    } else if (name === "return") {
       const n = navItems[navIndex];
       if (n) chooseBrowse(n);
     }
     return;
   }
   if (mode === "list") {
-    if (key.name === "i") {
-      const task = visible.find((t) => t.Key === selected);
-      if (task) {
-        inspecting = true;
-        expanded = false;
-        openTask(task);
-      }
-      return;
-    }
     let i = visible.findIndex((t) => t.Key === selected);
-    if (key.name === "return") {
+    if (name === "return") {
       if (visible[i]) openTask(visible[i]);
       return;
     } else if (
-      ["up", "down", "home", "end", "pageup", "pagedown"].includes(key.name)
+      ["up", "down", "home", "end", "pageup", "pagedown"].includes(name)
     )
-      i = navigationTarget(taskListScroll, i, visible.length, key.name);
+      i = navigationTarget(taskListScroll, i, visible.length, name);
     else return;
     const previous = visible.findIndex((t) => t.Key === selected);
     selected = visible[i]?.Key || "";
     selectTask(taskListScroll, previous, i);
-    updateSticky();
+    if (previous !== i && visible[i] && renderer.width >= 80) {
+      opened = structuredClone(visible[i]);
+      inspecting = true;
+      inspectorMode = "detail";
+      pending = null;
+      changes = [];
+      listScroll = taskListScroll?.scrollTop || 0;
+      renderActiveView();
+      updateSticky();
+    } else updateSticky();
   } else if (scroll) {
-    if (key.name === "down") scroll.scrollBy(1);
-    if (key.name === "up") scroll.scrollBy(-1);
-    if (key.name === "pagedown") scroll.scrollBy(10);
-    if (key.name === "pageup") scroll.scrollBy(-10);
+    if (name === "down") scroll.scrollBy(1);
+    if (name === "up") scroll.scrollBy(-1);
+    if (name === "pagedown") scroll.scrollBy(10);
+    if (name === "pageup") scroll.scrollBy(-10);
   }
 });
-renderer.on("resize", () => render());
+renderer.on("resize", () => { if (renderer.width < 150) cardIndex = Math.min(cardIndex, 3); else expanded = false; render(); });
+if (!cli.taskId) {
+  const cached = await snapshots.readCached();
+  if (cached) {
+    data = cached;
+    showingCachedSnapshot = true;
+    initializePreview();
+  }
+}
 render();
 await refresh();
 const timer = setInterval(() => {

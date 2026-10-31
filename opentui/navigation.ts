@@ -107,7 +107,7 @@ export function moveFocus(state: FocusState, direction: "left" | "right" | "down
     if (direction === "down") return { ...state, panel: "list" };
     const next = state.cardIndex + (direction === "right" ? 1 : -1);
     if (next < 0) return { ...state, panel: "browse" };
-    return { ...state, cardIndex: Math.min(state.width < 150 ? 3 : 5, next) };
+    return { ...state, cardIndex: Math.min(state.width < 150 && state.cardIndex < 4 ? 3 : 5, next) };
   }
   if (direction === "down") return state;
   if (state.panel === "browse" && direction === "right")
@@ -125,16 +125,12 @@ export function panelLayout(width: number, mode: string, cardsFocused: boolean, 
 }
 
 export type InspectorTab = "detail" | "links" | "history";
-export function tabAfterTaskSelection(previous: string | undefined, next: string, tab: InspectorTab): InspectorTab {
-  return previous === next ? tab : "detail";
-}
-
 export type NavigationState = {
   selected: string; opened: Task | null; inspectorMode: InspectorTab;
   inspecting: boolean; expanded: boolean; mode: string;
 };
 export type NavigationAction =
-  | { type: "sync"; tasks: Task[]; width: number; preview: boolean }
+  | { type: "sync"; tasks: Task[]; width: number; preview: boolean; preserve?: Task }
   | { type: "select"; task: Task | null; mode?: "list" | "inspector" }
   | { type: "focus"; mode: "browse" | "list" | InspectorTab }
   | { type: "expand" }
@@ -155,7 +151,7 @@ export function transitionNavigation(state: NavigationState, action: NavigationA
     }
   };
   if (action.type === "sync") {
-    const task = action.tasks.find((item) => item.Key === state.selected) || action.tasks[0] || null;
+    const task = action.tasks.find((item) => item.Key === state.selected) || action.preserve || action.tasks[0] || null;
     const open = !!task && (state.inspecting || (action.preview && action.width >= 80));
     if (task?.Key !== state.selected || (!state.opened && open)) select(task, open);
   } else if (action.type === "select") {

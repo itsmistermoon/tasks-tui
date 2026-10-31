@@ -29,13 +29,6 @@ test("layout follows focus and returns to full layout when width grows", async (
   expect(panelLayout(100, "detail", false, true, true)).toEqual({ sidebar: false, inspector: false });
 });
 
-test("the inspector keeps its tab for the same task and resets for a different task", async () => {
-  const { tabAfterTaskSelection } = await import("./navigation");
-  expect(tabAfterTaskSelection("one", "one", "history")).toBe("history");
-  expect(tabAfterTaskSelection("one", "two", "history")).toBe("detail");
-  expect(tabAfterTaskSelection(undefined, "one", "links")).toBe("detail");
-});
-
 const first = { Key: "one", Source: "a", Archived: false, Data: { title: "one" } };
 const second = { Key: "two", Source: "a", Archived: false, Data: { title: "two" } };
 const state = { selected: "one", opened: first, inspectorMode: "history" as const, inspecting: true, expanded: false, mode: "browse" };
@@ -82,4 +75,21 @@ test("resizing to full width initializes the selected preview immediately", asyn
   const resized = transitionNavigation(compact, { type: "resize", width: 160 });
   const next = transitionNavigation(resized, { type: "sync", tasks: [first], width: 160, preview: true });
   expect([next.selected, next.opened?.Key, next.inspecting]).toEqual(["one", "one", true]);
+});
+
+test("a linked task outside the view survives subsequent data synchronization", async () => {
+  const { transitionNavigation } = await import("./navigation");
+  const linked = transitionNavigation(state, { type: "select", task: second, mode: "inspector" });
+  const refreshed = transitionNavigation(linked, { type: "sync", tasks: [first], preserve: second, width: 160, preview: true });
+  expect([refreshed.selected, refreshed.opened?.Key, refreshed.mode]).toEqual(["two", "two", "detail"]);
+  const same = transitionNavigation({ ...refreshed, inspectorMode: "links", mode: "links" }, { type: "select", task: second, mode: "inspector" });
+  expect(same.inspectorMode).toBe("links");
+});
+
+test("reduced cards preserve Done and Archived navigation", () => {
+  for (const cardIndex of [4, 5]) {
+    const focused = { ...initial, panel: "cards" as const, width: 90, cardIndex };
+    expect(moveFocus(focused, "right").cardIndex).toBe(Math.min(5, cardIndex + 1));
+    expect(moveFocus(focused, "left").cardIndex).toBe(cardIndex - 1);
+  }
 });

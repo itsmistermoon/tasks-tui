@@ -168,11 +168,11 @@ function navigate(action: NavigationAction) {
   mode = next.mode as typeof mode;
   if (previous !== selected) { pending = null; changes = []; }
 }
-function listTasks() {
+function listTasks(preserve?: Task) {
   const projection = projectView(data.tasks, data.sources, { query, source, group, showDone });
   visible = projection.tasks;
   navItems = projection.browse;
-  navigate({ type: "sync", tasks: visible, width: renderer.width, preview: !taskLookupPending });
+  navigate({ type: "sync", tasks: visible, width: renderer.width, preview: !taskLookupPending, preserve });
 }
 function nav() {
   navIndex = Math.min(navIndex, Math.max(0, navItems.length - 1));
@@ -249,7 +249,6 @@ function clearRoot() {
   }
 }
 function render() {
-  listTasks();
   nav();
   if (mode !== "browse" || cardsFocused) {
     const active = navItems.findIndex((item) => item.source === source && item.group === group);
@@ -326,6 +325,7 @@ function render() {
         const path = addPath.trim().replace(/^~(?=\/)/, homedir());
         settings.sources = [...new Set([...settings.sources, path])];
         await save();
+        snapshots.setCacheFile(snapshotCachePath(cli.sources, settings.sources));
         addPath = "";
         mode = "list";
         focus = "list";
@@ -362,6 +362,7 @@ function render() {
   input.on("input", (value: string) => {
     searchText = value;
     query = value;
+    listTasks();
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => {
       if (focus === "search") render();
@@ -487,8 +488,9 @@ function render() {
     const cards = box("status-cards", { flexDirection: "row", width: "100%", height: 4, flexShrink: 0 });
     contentArea.add(cards);
     const counts = countTasks(source ? data.tasks.filter((task) => task.Source === source) : data.tasks);
-    const cardStatuses = renderer.width < 150 ? taskStatuses.slice(0, 4) : taskStatuses;
-    cardStatuses.forEach((state, index) => {
+    const cardIndexes = renderer.width < 150 ? [0, 1, 2, cardsFocused && cardIndex >= 4 ? cardIndex : 3] : taskStatuses.map((_, index) => index);
+    cardIndexes.forEach((index) => {
+      const state = taskStatuses[index];
       const card = box(`status-card-${index}`, { border: true, borderStyle: "rounded", borderColor: cardsFocused && cardIndex === index ? activeBorder : inactiveBorder, flexGrow: 1, flexBasis: 0, paddingLeft: 1 });
       const label = line(`status-card-label-${index}`, state.toLowerCase(), cardsFocused && cardIndex === index ? activeBorder : "#b8bac5");
       label.attributes = cardsFocused && cardIndex === index ? 1 : 0;
@@ -921,6 +923,7 @@ async function refresh() {
       }
     }
     const changed = JSON.stringify(data) !== JSON.stringify(next);
+    const detached = opened && !visible.some((task) => task.Key === selected) ? next.tasks.find((task) => task.Key === selected) : undefined;
     data = next;
     const hadCachedSnapshot = showingCachedSnapshot;
     showingCachedSnapshot = false;
@@ -938,7 +941,7 @@ async function refresh() {
         taskLookupChanged = true;
       }
     }
-    listTasks();
+    if (changed || taskLookupChanged || hadCachedSnapshot) listTasks(detached);
     if ((changed || taskLookupChanged || hadCachedSnapshot) && focus !== "search" && mode !== "add" && mode !== "help")
       render();
   } catch (e) {
@@ -1012,6 +1015,7 @@ renderer.keyInput.on("keypress", (key) => {
     if (key.name === "escape") {
       searchText = "";
       query = "";
+      listTasks();
       focus = "list";
       input?.blur();
       render();
@@ -1047,6 +1051,7 @@ renderer.keyInput.on("keypress", (key) => {
     } else if (next.panel === "browse") navigate({ type: "focus", mode: "browse" });
     else if (next.panel === "list") {
       navigate({ type: "focus", mode: "list" });
+      if (!visible.some((task) => task.Key === selected)) listTasks();
       const task = visible.find((t) => t.Key === selected);
       if (task && renderer.width >= 80) {
         navigate({ type: "select", task });
@@ -1107,6 +1112,7 @@ renderer.keyInput.on("keypress", (key) => {
   }
   if (name === "d") {
     showDone = !showDone;
+    listTasks();
     settings.showDone = showDone;
     save();
     render();
@@ -1221,15 +1227,15 @@ renderer.keyInput.on("keypress", (key) => {
     if (name === "pageup") scroll.scrollBy(-10);
   }
 });
-renderer.on("resize", () => { if (renderer.width < 150) cardIndex = Math.min(cardIndex, 3); navigate({ type: "resize", width: renderer.width }); render(); });
+renderer.on("resize", () => { navigate({ type: "resize", width: renderer.width }); listTasks(opened && !visible.some((task) => task.Key === selected) ? opened : undefined); render(); });
 if (!cli.taskId) {
   const cached = await snapshots.readCached();
   if (cached) {
     data = cached;
     showingCachedSnapshot = true;
-    listTasks();
   }
 }
+listTasks();
 render();
 await refresh();
 const timer = setInterval(() => {

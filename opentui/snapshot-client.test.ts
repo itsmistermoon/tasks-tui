@@ -25,3 +25,28 @@ test("snapshot client loads a valid cached snapshot for immediate display", asyn
     expect(await client.readCached()).toEqual(cached);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test("changing configured sources writes subsequent snapshots to the new cache", async () => {
+  const { mkdtemp, writeFile, readFile, chmod, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { SnapshotClient } = await import("./snapshot-client");
+  const directory = await mkdtemp(join(tmpdir(), "tasks-cache-test-"));
+  const backend = join(directory, "backend");
+  const oldCache = join(directory, "old.json");
+  const newCache = join(directory, "new.json");
+  const snapshot: Snapshot = { tasks: [task("one", "a")], sources: ["a"], failed: [], errors: [] };
+  await writeFile(backend, `#!/bin/sh\nwhile read line; do echo '${JSON.stringify(snapshot)}'; done\n`);
+  await chmod(backend, 0o700);
+  const client = new SnapshotClient(backend, [], oldCache);
+  try {
+    await client.read();
+    client.setCacheFile(newCache);
+    await client.read();
+    expect(JSON.parse(await readFile(oldCache, "utf8"))).toEqual(snapshot);
+    expect(JSON.parse(await readFile(newCache, "utf8"))).toEqual(snapshot);
+  } finally {
+    client.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

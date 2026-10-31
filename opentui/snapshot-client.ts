@@ -24,6 +24,10 @@ export class SnapshotClient {
     private cacheFile: string,
   ) {}
 
+  setCacheFile(cacheFile: string): void {
+    this.cacheFile = cacheFile;
+  }
+
   async readCached(): Promise<Snapshot | null> {
     try {
       const cached = JSON.parse(await readFile(this.cacheFile, "utf8"));
@@ -34,6 +38,7 @@ export class SnapshotClient {
   }
 
   async read(): Promise<Snapshot> {
+    const cacheFile = this.cacheFile;
     if (!this.process) {
       this.process = Bun.spawn([this.backend, "--serve", ...this.sources], {
         stdin: "pipe",
@@ -57,10 +62,10 @@ export class SnapshotClient {
     this.buffer = this.buffer.slice(index + 1);
     const snapshot = retainFailedSources(this.current, JSON.parse(line));
     this.current = snapshot;
-    if (!snapshot.errors.length) {
+    if (!snapshot.errors.length && cacheFile === this.cacheFile) {
       try {
-        await mkdir(dirname(this.cacheFile), { recursive: true, mode: 0o700 });
-        await writeFile(this.cacheFile, JSON.stringify(snapshot), { mode: 0o600 });
+        await mkdir(dirname(cacheFile), { recursive: true, mode: 0o700 });
+        await writeFile(cacheFile, JSON.stringify(snapshot), { mode: 0o600 });
       } catch {}
     }
     return snapshot;

@@ -4,8 +4,6 @@ A read-only terminal viewer for [tasks-axi](https://github.com/kunchenguid/tasks
 
 Browse work across backlogs, search task notes, and inspect the context behind a task without leaving the terminal. The Markdown files remain the source of truth; use `tasks-axi` when you want to change them.
 
-![Tasks grouped by status, with backlog filters in the sidebar](docs/images/overview.png)
-
 ## Why
 
 A task's title is only part of the picture. Its status, dependencies, hold reason, notes, and source backlog all help explain what is happening. `tasks-tui` brings those details together in a navigable view while keeping the underlying backlog readable and editable by your existing tools.
@@ -58,8 +56,6 @@ When a backlog cannot be read, its error is printed to stderr and included in th
 ## Inspect a task
 
 Select a task and press `Enter` or move right to open the inspector. On a wide terminal it appears alongside the task list; on a narrow terminal it uses the available space. Switch between details, links, and archived note history without losing the selected task.
-
-![Three-panel layout showing the task list and an inspector](docs/images/inspector.png)
 
 - Press `Page Up` or `Page Down` to move to the previous or next task.
 - Press `e` to toggle inspector expansion on smaller terminals, or move left to return to the list.
@@ -114,4 +110,4 @@ go vet ./...
 bun test
 ```
 
-The OpenTUI frontend lives in `opentui/`. The Go backend discovers sources, reads snapshots, serves archived note history, and provides task counts. The screenshots above use fictional example tasks.
+The OpenTUI frontend lives in `opentui/`. The Go backend discovers sources, reads snapshots, serves archived note history, and provides task counts.

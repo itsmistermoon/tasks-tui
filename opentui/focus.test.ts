@@ -31,7 +31,7 @@ test("layout follows focus and returns to full layout when width grows", async (
 
 const first = { Key: "one", Source: "a", Archived: false, Data: { title: "one" } };
 const second = { Key: "two", Source: "a", Archived: false, Data: { title: "two" } };
-const state = { selected: "one", opened: first, inspectorMode: "history" as const, inspecting: true, expanded: false, mode: "browse" };
+const state = { selected: "one", opened: first, inspectorMode: "history" as const, inspecting: true, expanded: false, mode: "browse" as const, modalReturnMode: "list" as const, cardsFocused: false, cardIndex: 0 };
 
 test("refresh replaces selection and resets the tab in Browse and inspector", async () => {
   const { transitionNavigation } = await import("./navigation");
@@ -91,5 +91,24 @@ test("reduced cards preserve Done and Archived navigation", () => {
     const focused = { ...initial, panel: "cards" as const, width: 90, cardIndex };
     expect(moveFocus(focused, "right").cardIndex).toBe(Math.min(5, cardIndex + 1));
     expect(moveFocus(focused, "left").cardIndex).toBe(cardIndex - 1);
+  }
+});
+
+test("changing task while either modal is open resets all dependent navigation", async () => {
+  const { transitionNavigation } = await import("./navigation");
+  for (const modal of ["help", "add"] as const) {
+    const history = { ...state, mode: "history" as const, expanded: true, cardIndex: 5 };
+    const overlay = transitionNavigation(history, { type: "modal", modal });
+    const next = transitionNavigation(overlay, { type: "sync", tasks: [second], width: 160, preview: true });
+    expect([next.selected, next.opened?.Key, next.inspectorMode, next.inspecting, next.expanded, next.mode, next.modalReturnMode, next.cardsFocused, next.cardIndex]).toEqual(["two", "two", "detail", true, false, modal, "detail", false, 5]);
+    expect(transitionNavigation(next, { type: "dismiss" }).mode).toBe("detail");
+  }
+});
+
+test("resizing preserves the focused Done or Archived card", async () => {
+  const { transitionNavigation } = await import("./navigation");
+  for (const cardIndex of [4, 5]) {
+    const next = transitionNavigation({ ...state, cardsFocused: true, cardIndex }, { type: "resize", width: 90 });
+    expect([next.cardsFocused, next.cardIndex]).toEqual([true, cardIndex]);
   }
 });

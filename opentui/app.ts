@@ -21,7 +21,7 @@ import {
   transitionNavigation,
   type NavigationAction,
   type FocusState,
-  type InspectorTab,
+  type NavigationState,
 } from "./navigation";
 import { projectView, type BrowseItem } from "./views";
 import { scrollbarOptions, hideScrollbars } from "./scrollbar";
@@ -79,7 +79,7 @@ const save = async () => {
 };
 const renderer = await createCliRenderer({ exitOnCtrlC: true, useMouse: false });
 const sidebarWidth = 25;
-const layout = () => panelLayout(renderer.width, mode, cardsFocused, inspecting, expanded);
+const layout = () => panelLayout(renderer.width, navigation.mode === "help" || navigation.mode === "add" ? navigation.modalReturnMode : navigation.mode, navigation.cardsFocused, navigation.inspecting, navigation.expanded);
 const showInspector = () => layout().inspector;
 const hasSidebar = () => layout().sidebar;
 const contentWidth = () =>
@@ -106,20 +106,13 @@ const categoryHeading = (state: string, count: number) => {
 };
 let inspectorArea: BoxRenderable | null = null,
   inspectorPanel: BoxRenderable | null = null;
-let inspecting = false,
-  expanded = false,
-  inspectorMode: InspectorTab = "detail";
-let modalReturnMode: "list" | "browse" | "detail" | "links" | "history" = "list";
+let navigation: NavigationState = { selected: "", opened: null, inspectorMode: "detail", inspecting: false, expanded: false, mode: "browse", modalReturnMode: "list", cardsFocused: false, cardIndex: 0 };
 let data: Snapshot = { tasks: [], sources: [], errors: [], failed: [] },
   visible: Task[] = [],
-  selected = "",
   query = "",
-  mode: "list" | "browse" | "detail" | "help" | "links" | "history" | "add" =
-    "browse",
   focus: "list" | "search" = "list",
   navIndex = 0,
   navItems: BrowseItem[] = [],
-  opened: Task | null = null,
   pending: Task | null = null,
   changes: string[] = [],
   showDone = !!settings.showDone,
@@ -145,7 +138,6 @@ let data: Snapshot = { tasks: [], sources: [], errors: [], failed: [] },
 let taskLookupPending = !!cli.taskId, taskLookupWarning = "";
 let showingCachedSnapshot = false;
 let helpPanel: HelpPanel = "browse";
-let cardsFocused = false, cardIndex = 0;
 const text = (
   id: string,
   content: string,
@@ -162,11 +154,9 @@ const text = (
 const box = (id: string, opts: any = {}) =>
   new BoxRenderable(renderer, { id, flexDirection: "column", ...opts });
 function navigate(action: NavigationAction) {
-  const previous = selected;
-  const next = transitionNavigation({ selected, opened, inspectorMode, inspecting, expanded, mode }, action);
-  ({ selected, opened, inspectorMode, inspecting, expanded } = next);
-  mode = next.mode as typeof mode;
-  if (previous !== selected) { pending = null; changes = []; }
+  const previous = navigation.selected;
+  navigation = transitionNavigation(navigation, action);
+  if (previous !== navigation.selected) { pending = null; changes = []; }
 }
 function listTasks(preserve?: Task) {
   const projection = projectView(data.tasks, data.sources, { query, source, group, showDone });
@@ -188,11 +178,11 @@ function chooseBrowse(v: { source: string; group: string }) {
   render();
 }
 function openTask(t: Task) {
-  const previousMode = mode;
-  if (mode === "list") listScroll = taskListScroll?.scrollTop || 0;
-  else if (mode === "detail" && scroll) scroll.scrollTop = 0;
-  if (panelLayout(renderer.width, mode, cardsFocused, true, expanded).inspector && taskListScroll) {
-    const previous = visible.findIndex((item) => item.Key === selected),
+  const previousMode = navigation.mode;
+  if (navigation.mode === "list") listScroll = taskListScroll?.scrollTop || 0;
+  else if (navigation.mode === "detail" && scroll) scroll.scrollTop = 0;
+  if (panelLayout(renderer.width, navigation.mode, navigation.cardsFocused, true, navigation.expanded).inspector && taskListScroll) {
+    const previous = visible.findIndex((item) => item.Key === navigation.selected),
       next = visible.findIndex((item) => item.Key === t.Key);
     if (next >= 0) {
       selectTask(taskListScroll, previous, next);
@@ -204,11 +194,11 @@ function openTask(t: Task) {
   pending = null;
   changes = [];
   focus = "list";
-  if (previousMode !== mode) render();
+  if (previousMode !== navigation.mode) render();
   else renderActiveView();
 }
 function backFromTask() {
-  if (inspecting && expanded) {
+  if (navigation.inspecting && navigation.expanded) {
     navigate({ type: "expand" });
     render();
   } else {
@@ -248,9 +238,10 @@ function clearRoot() {
     child.destroyRecursively();
   }
 }
-function render() {
+function render(underlay = false) {
+  const viewingMode = underlay ? navigation.modalReturnMode : navigation.mode;
   nav();
-  if (mode !== "browse" || cardsFocused) {
+  if (viewingMode !== "browse" || navigation.cardsFocused) {
     const active = navItems.findIndex((item) => item.source === source && item.group === group);
     if (active >= 0) navIndex = active;
   }
@@ -258,13 +249,13 @@ function render() {
   if (taskListScroll && !taskListScroll.isDestroyed)
     listScroll = taskListScroll.scrollTop;
   const showingTasks =
-    mode === "list" || (mode === "browse" && renderer.width >= 105);
+    viewingMode === "list" || (viewingMode === "browse" && renderer.width >= 105);
   const oldScroll = showingTasks
     ? listScroll
-    : lastRenderedMode === mode
+    : lastRenderedMode === viewingMode
       ? scroll?.scrollTop || 0
       : 0;
-  lastRenderedMode = mode;
+  lastRenderedMode = viewingMode;
   clearRoot();
   scroll = null;
   taskListScroll = null;
@@ -274,11 +265,9 @@ function render() {
   input = null;
   const frame = box("frame", { width: "100%", height: "100%" });
   renderer.root.add(frame);
-  if (mode === "add" || mode === "help") {
-    const overlayMode = mode;
-    mode = modalReturnMode;
-    render();
-    mode = overlayMode;
+  if (viewingMode === "add" || viewingMode === "help") {
+    const overlayMode = viewingMode;
+    render(true);
     for (const id of ["panel", "list-panel", "nav"]) {
       const background = renderer.root.findDescendantById(id);
       if (background instanceof BoxRenderable)
@@ -327,7 +316,7 @@ function render() {
         await save();
         snapshots.setCacheFile(snapshotCachePath(cli.sources, settings.sources));
         addPath = "";
-        mode = "list";
+        navigate({ type: "focus", mode: "list" });
         focus = "list";
         await refresh();
         render();
@@ -390,7 +379,7 @@ function render() {
       location.add(input);
       input.focus();
     }
-    const panel: HelpPanel = cardsFocused ? "cards" : mode as HelpPanel;
+    const panel: HelpPanel = navigation.cardsFocused ? "cards" : viewingMode as HelpPanel;
     footer.add(keybindBar("footer", footerHints(panel, renderer.width, focus === "search"), { width: "auto", flexShrink: 0 }));
   };
   const area = box("area", { flexDirection: "row", flexGrow: 1 });
@@ -399,22 +388,22 @@ function render() {
   const side = hasSidebar();
   const split = showInspector();
   const viewMode =
-    split && inspecting && opened && ["browse", "list"].includes(mode)
-      ? inspectorMode
-      : mode;
+    split && navigation.inspecting && navigation.opened && ["browse", "list"].includes(viewingMode)
+      ? navigation.inspectorMode
+      : viewingMode;
   if (side) {
     const n = box("nav", {
       border: true,
       borderStyle: "rounded",
-      borderColor: cardsFocused ? inactiveBorder : overviewBorder("browse", mode, focus),
+      borderColor: navigation.cardsFocused ? inactiveBorder : overviewBorder("browse", viewingMode, focus),
       width: wide ? sidebarWidth : "100%",
       flexGrow: wide ? 0 : 1,
       paddingLeft: 1,
       paddingRight: 1,
     });
     area.add(n);
-    const navTitle = line("nav-title", "tasks-tui", mode === "browse" && !cardsFocused ? activeBorder : "#858796");
-    navTitle.attributes = mode === "browse" && !cardsFocused ? 1 : 0;
+    const navTitle = line("nav-title", "tasks-tui", viewingMode === "browse" && !navigation.cardsFocused ? activeBorder : "#858796");
+    navTitle.attributes = viewingMode === "browse" && !navigation.cardsFocused ? 1 : 0;
     n.add(navTitle);
     const ns = hideScrollbars(
       new ScrollBoxRenderable(renderer, {
@@ -477,23 +466,23 @@ function render() {
       };
       setTimeout(restore, 0);
     }
-    if (mode === "browse" && !wide) {
+    if (viewingMode === "browse" && !wide) {
       renderFooter();
       return;
     }
   }
   const contentArea = box("content-area", { flexDirection: "column", flexGrow: 1, flexBasis: 0 });
   area.add(contentArea);
-  if (group === "home" && (mode !== "browse" || renderer.width >= 80 || cardsFocused)) {
+  if (group === "home" && (viewingMode !== "browse" || renderer.width >= 80 || navigation.cardsFocused)) {
     const cards = box("status-cards", { flexDirection: "row", width: "100%", height: 4, flexShrink: 0 });
     contentArea.add(cards);
     const counts = countTasks(source ? data.tasks.filter((task) => task.Source === source) : data.tasks);
-    const cardIndexes = renderer.width < 150 ? [0, 1, 2, cardsFocused && cardIndex >= 4 ? cardIndex : 3] : taskStatuses.map((_, index) => index);
+    const cardIndexes = renderer.width < 150 ? [0, 1, 2, navigation.cardsFocused && navigation.cardIndex >= 4 ? navigation.cardIndex : 3] : taskStatuses.map((_, index) => index);
     cardIndexes.forEach((index) => {
       const state = taskStatuses[index];
-      const card = box(`status-card-${index}`, { border: true, borderStyle: "rounded", borderColor: cardsFocused && cardIndex === index ? activeBorder : inactiveBorder, flexGrow: 1, flexBasis: 0, paddingLeft: 1 });
-      const label = line(`status-card-label-${index}`, state.toLowerCase(), cardsFocused && cardIndex === index ? activeBorder : "#b8bac5");
-      label.attributes = cardsFocused && cardIndex === index ? 1 : 0;
+      const card = box(`status-card-${index}`, { border: true, borderStyle: "rounded", borderColor: navigation.cardsFocused && navigation.cardIndex === index ? activeBorder : inactiveBorder, flexGrow: 1, flexBasis: 0, paddingLeft: 1 });
+      const label = line(`status-card-label-${index}`, state.toLowerCase(), navigation.cardsFocused && navigation.cardIndex === index ? activeBorder : "#b8bac5");
+      label.attributes = navigation.cardsFocused && navigation.cardIndex === index ? 1 : 0;
       card.add(label);
       card.add(line(`status-card-count-${index}`, String(counts.statuses[state]), colors[state]));
       cards.add(card);
@@ -506,7 +495,7 @@ function render() {
       border: true,
       borderStyle: "rounded",
       borderColor:
-        mode === "list" && focus === "list" && !cardsFocused ? activeBorder : "#50556c",
+        viewingMode === "list" && focus === "list" && !navigation.cardsFocused ? activeBorder : "#50556c",
       paddingLeft: 1,
       paddingRight: 1,
       flexGrow: 3,
@@ -519,11 +508,11 @@ function render() {
     border: true,
     borderStyle: "rounded",
     borderColor:
-      ["detail", "history", "links"].includes(viewMode) && opened
-        ? mode === "browse" || mode === "list" || focus === "search" || cardsFocused
+      ["detail", "history", "links"].includes(viewMode) && navigation.opened
+        ? viewingMode === "browse" || viewingMode === "list" || focus === "search" || navigation.cardsFocused
           ? "#50556c"
           : activeBorder
-        : split ? inactiveBorder : overviewBorder("list", mode, focus),
+        : split ? inactiveBorder : overviewBorder("list", viewingMode, focus),
     paddingLeft: 1,
     paddingRight: 1,
     flexGrow: split ? 2 : 1,
@@ -534,7 +523,7 @@ function render() {
     inspectorArea = panelArea;
     inspectorPanel = p;
   }
-  if (opened && ["detail", "history", "links"].includes(viewMode)) {
+  if (navigation.opened && ["detail", "history", "links"].includes(viewMode)) {
     populateTaskPanel(p, viewMode, oldScroll);
   } else if (split) {
     p.add(line("inspector-empty", "select a task to inspect", "#858796"));
@@ -548,12 +537,12 @@ function populateTaskPanel(
   viewMode: string,
   oldScroll: number,
 ) {
-  if (opened && ["detail", "history", "links"].includes(viewMode)) {
+  if (navigation.opened && ["detail", "history", "links"].includes(viewMode)) {
     const tabs = box("inspector-tabs", { flexDirection: "row", height: 1 });
     p.add(tabs);
     for (const tab of ["detail", "links", "history"] as const) {
       const active = tab === viewMode;
-      const inspectorFocused = ["detail", "links", "history"].includes(mode) && !cardsFocused && focus !== "search";
+      const inspectorFocused = ["detail", "links", "history"].includes(navigation.mode) && !navigation.cardsFocused && focus !== "search";
       const tabBox = box("tab-" + tab, { height: 1, backgroundColor: active ? (inspectorFocused ? activeBorder : inactiveBorder) : selectionBackground, shouldFill: true });
       const label = line("tab-label-" + tab, ` ${tab} `, active ? (inspectorFocused ? "#191a29" : "#e0e0e4") : "#858796");
       label.attributes = active ? 1 : 0;
@@ -563,14 +552,14 @@ function populateTaskPanel(
     p.add(
       line(
         "task-heading",
-        `${icons[status(opened)]} ${status(opened).toLowerCase()} · ${viewMode}`,
-        taskBorder(status(opened)),
+        `${icons[status(navigation.opened)]} ${status(navigation.opened).toLowerCase()} · ${viewMode}`,
+        taskBorder(status(navigation.opened)),
       ),
     );
     const taskHeading = p.findDescendantById("task-heading");
-    if (taskHeading instanceof TextRenderable) taskHeading.attributes = ["detail", "links", "history"].includes(mode) && !cardsFocused ? 1 : 0;
+    if (taskHeading instanceof TextRenderable) taskHeading.attributes = ["detail", "links", "history"].includes(navigation.mode) && !navigation.cardsFocused ? 1 : 0;
   }
-  if (viewMode === "detail" && opened) {
+  if (viewMode === "detail" && navigation.opened) {
     p.add(line("panel-padding", " ", RGBA.fromIndex(8)));
     if (changes.length)
       p.add(
@@ -588,7 +577,7 @@ function populateTaskPanel(
       }),
     );
     p.add(scroll);
-    const t = opened;
+    const t = navigation.opened;
     const gap = (id: string) =>
       scroll!.add(text(id, " ", RGBA.fromIndex(8), { height: 1 }));
     const section = (
@@ -667,7 +656,7 @@ function populateTaskPanel(
       }
     }
     scroll.scrollTop = oldScroll;
-  } else if ((viewMode === "links" || viewMode === "history") && opened) {
+  } else if ((viewMode === "links" || viewMode === "history") && navigation.opened) {
     const sc = hideScrollbars(
       new ScrollBoxRenderable(renderer, {
         scrollbarOptions,
@@ -681,7 +670,7 @@ function populateTaskPanel(
     sc.add(
       text(
         "extra-task-title",
-        String(opened.Data.title),
+        String(navigation.opened.Data.title),
         RGBA.defaultForeground(),
         { width: "100%", attributes: 1 },
       ),
@@ -726,22 +715,22 @@ function populateTaskPanel(
   }
 }
 function renderActiveView() {
-  if (!showInspector() || !inspectorArea || !inspectorPanel || inspectorArea.isDestroyed || !opened) { render(); return; }
+  if (!showInspector() || !inspectorArea || !inspectorPanel || inspectorArea.isDestroyed || !navigation.opened) { render(); return; }
   const listPanel = renderer.root.findDescendantById("list-panel");
-  if (listPanel instanceof BoxRenderable) listPanel.borderColor = mode === "list" && !cardsFocused ? activeBorder : inactiveBorder;
+  if (listPanel instanceof BoxRenderable) listPanel.borderColor = navigation.mode === "list" && !navigation.cardsFocused ? activeBorder : inactiveBorder;
   const heading = renderer.root.findDescendantById("panel-heading");
   if (heading instanceof TextRenderable) {
-    const focused = mode === "list" && !cardsFocused && focus !== "search";
+    const focused = navigation.mode === "list" && !navigation.cardsFocused && focus !== "search";
     heading.fg = focused ? activeBorder : "#858796";
     heading.attributes = focused ? 1 : 0;
   }
   inspectorArea.remove(inspectorPanel);
   inspectorPanel.destroyRecursively();
   scroll = null;
-  const panel = box("panel", { border: true, borderStyle: "rounded", borderColor: ["detail", "links", "history"].includes(mode) && !cardsFocused ? activeBorder : inactiveBorder, paddingLeft: 1, paddingRight: 1, flexGrow: 2, flexBasis: 0 });
+  const panel = box("panel", { border: true, borderStyle: "rounded", borderColor: ["detail", "links", "history"].includes(navigation.mode) && !navigation.cardsFocused ? activeBorder : inactiveBorder, paddingLeft: 1, paddingRight: 1, flexGrow: 2, flexBasis: 0 });
   inspectorArea.add(panel);
   inspectorPanel = panel;
-  populateTaskPanel(panel, mode === "list" || mode === "browse" ? inspectorMode : mode, 0);
+  populateTaskPanel(panel, navigation.mode === "list" || navigation.mode === "browse" ? navigation.inspectorMode : navigation.mode, 0);
 }
 function renderTaskList(p: BoxRenderable, oldScroll: number) {
   p.add(
@@ -754,11 +743,11 @@ function renderTaskList(p: BoxRenderable, oldScroll: number) {
           visible.length,
           Boolean(source || group || query),
         ),
-      mode === "list" && !cardsFocused ? activeBorder : "#858796",
+      navigation.mode === "list" && !navigation.cardsFocused ? activeBorder : "#858796",
     ),
   );
   const heading = p.findDescendantById("panel-heading");
-  if (heading instanceof TextRenderable) heading.attributes = mode === "list" && !cardsFocused ? 1 : 0;
+  if (heading instanceof TextRenderable) heading.attributes = navigation.mode === "list" && !navigation.cardsFocused ? 1 : 0;
   p.add(line("panel-padding", " ", RGBA.fromIndex(8)));
   const sticky = text("sticky", "", "#858796", { height: 1 });
   stickyText = sticky;
@@ -809,8 +798,8 @@ function renderTaskList(p: BoxRenderable, oldScroll: number) {
     item.add(body);
     const titleBox = box("selection-" + i, {
       width: "100%",
-      backgroundColor: t.Key === selected ? selectionBackground : undefined,
-      shouldFill: t.Key === selected,
+      backgroundColor: t.Key === navigation.selected ? selectionBackground : undefined,
+      shouldFill: t.Key === navigation.selected,
     });
     body.add(titleBox);
     titleBox.add(
@@ -846,14 +835,14 @@ function renderTaskList(p: BoxRenderable, oldScroll: number) {
         listView.scrollHeight > 0
       ) {
         const target = listView.getRenderable(
-          "task-" + visible.findIndex((t) => t.Key === selected),
+          "task-" + visible.findIndex((t) => t.Key === navigation.selected),
         );
         if (revealSelected && (!target || target.height === 0)) return;
         listScroll = restoreTaskViewport(
           listView,
           oldScroll,
           revealSelected
-            ? visible.findIndex((t) => t.Key === selected)
+            ? visible.findIndex((t) => t.Key === navigation.selected)
             : undefined,
         );
         if (revealSelected) revealSelected = false;
@@ -870,7 +859,7 @@ function renderTaskList(p: BoxRenderable, oldScroll: number) {
     }
     setTimeout(restore, 0);
   }
-  const sel = visible.findIndex((t) => t.Key === selected);
+  const sel = visible.findIndex((t) => t.Key === navigation.selected);
   sticky.content =
     sel >= 0
       ? categoryHeading(
@@ -904,8 +893,8 @@ async function refresh() {
   try {
     const next = await snapshots.read();
     if (renderer.isDestroyed) return;
-    if (opened) {
-      const t = next.tasks.find((x) => x.Key === opened!.Key);
+    if (navigation.opened) {
+      const t = next.tasks.find((x) => x.Key === navigation.opened!.Key);
       if (showingCachedSnapshot && t) {
         navigate({ type: "select", task: t });
         changes = [];
@@ -913,8 +902,8 @@ async function refresh() {
       } else if (showingCachedSnapshot && !t) {
         navigate({ type: "select", task: null });
       } else if (t) {
-        changes = Object.keys({ ...opened.Data, ...t.Data }).filter(
-          (k) => JSON.stringify(opened!.Data[k]) !== JSON.stringify(t.Data[k]),
+        changes = Object.keys({ ...navigation.opened.Data, ...t.Data }).filter(
+          (k) => JSON.stringify(navigation.opened!.Data[k]) !== JSON.stringify(t.Data[k]),
         );
         pending = changes.length ? t : null;
       } else {
@@ -923,7 +912,7 @@ async function refresh() {
       }
     }
     const changed = JSON.stringify(data) !== JSON.stringify(next);
-    const detached = opened && !visible.some((task) => task.Key === selected) ? next.tasks.find((task) => task.Key === selected) : undefined;
+    const detached = navigation.opened && !visible.some((task) => task.Key === navigation.selected) ? next.tasks.find((task) => task.Key === navigation.selected) : undefined;
     data = next;
     const hadCachedSnapshot = showingCachedSnapshot;
     showingCachedSnapshot = false;
@@ -942,7 +931,7 @@ async function refresh() {
       }
     }
     if (changed || taskLookupChanged || hadCachedSnapshot) listTasks(detached);
-    if ((changed || taskLookupChanged || hadCachedSnapshot) && focus !== "search" && mode !== "add" && mode !== "help")
+    if ((changed || taskLookupChanged || hadCachedSnapshot) && focus !== "search" && navigation.mode !== "add" && navigation.mode !== "help")
       render();
   } catch (e) {
     if (renderer.isDestroyed) return;
@@ -954,9 +943,9 @@ async function refresh() {
   }
 }
 function linkEntries(): { label: string; url?: string; task?: Task }[] {
-  if (!opened) return [];
+  if (!navigation.opened) return [];
   const value =
-    String(opened.Data.links || "") + " " + String(opened.Data.body || "");
+    String(navigation.opened.Data.links || "") + " " + String(navigation.opened.Data.body || "");
   const urls = [
     ...new Set(
       value.match(/https?:\/\/[^\s<>,]+|data\/[A-Za-z0-9_./-]+\.md/g) || [],
@@ -964,8 +953,8 @@ function linkEntries(): { label: string; url?: string; task?: Task }[] {
   ];
   const tasks = data.tasks.filter(
     (t) =>
-      t.Source === opened?.Source &&
-      matchesDependency(String(opened?.Data.deps || ""), String(t.Data.id)),
+      t.Source === navigation.opened?.Source &&
+      matchesDependency(String(navigation.opened?.Data.deps || ""), String(t.Data.id)),
   );
   return [
     ...urls.map((url) => ({ label: url, url })),
@@ -977,30 +966,30 @@ function linkEntries(): { label: string; url?: string; task?: Task }[] {
 }
 async function activateLink(index: number) {
   const entry = linkEntries()[index];
-  if (!entry || !opened) return;
+  if (!entry || !navigation.opened) return;
   linkIndex = index;
   if (entry.task) {
     openTask(entry.task);
     return;
   }
   if (entry.url) {
-    linkError = (await openLink(entry.url, opened.Source)) || "";
-    if (!renderer.isDestroyed && mode === "links") renderActiveView();
+    linkError = (await openLink(entry.url, navigation.opened.Source)) || "";
+    if (!renderer.isDestroyed && navigation.mode === "links") renderActiveView();
   }
 }
 async function showHistory() {
-  if (!opened) return;
-  const key = opened.Key;
+  if (!navigation.opened) return;
+  const key = navigation.opened.Key;
   navigate({ type: "focus", mode: "history" });
   historyText = "loading…";
   renderActiveView();
   const p = Bun.spawn(
-    [backend, "--history", opened.Source, String(opened.Data.id)],
+    [backend, "--history", navigation.opened.Source, String(navigation.opened.Data.id)],
     { stdout: "pipe", stderr: "pipe" },
   );
   const result = await new Response(p.stdout).text();
   const failed = await p.exited;
-  if (renderer.isDestroyed || opened?.Key !== key) return;
+  if (renderer.isDestroyed || navigation.opened?.Key !== key) return;
   historyText = failed
     ? "unable to read archived notes"
     : result.trim() === "No archived note versions found for this task."
@@ -1008,7 +997,7 @@ async function showHistory() {
       : result.trim() === "No archived note versions available."
         ? "no archived note versions available"
         : result;
-  if (mode === "history") renderActiveView();
+  if (navigation.mode === "history") renderActiveView();
 }
 renderer.keyInput.on("keypress", (key) => {
   if (focus === "search") {
@@ -1022,37 +1011,36 @@ renderer.keyInput.on("keypress", (key) => {
     }
     return;
   }
-  if (mode === "help") {
-    mode = modalReturnMode;
+  if (navigation.mode === "help") {
+    navigate({ type: "dismiss" });
     render();
     return;
   }
-  if (mode === "add") {
+  if (navigation.mode === "add") {
     if (key.name === "escape") {
-      mode = modalReturnMode;
+      navigate({ type: "dismiss" });
       addPath = "";
       render();
     }
     return;
   }
   const name = ({ j: "down", k: "up", h: "left", l: "right" } as Record<string, string>)[key.name] || key.name;
-  if ((name === "left" || name === "right" || (cardsFocused && name === "down"))) {
-    const panel: FocusState["panel"] = cardsFocused ? "cards" : mode === "browse" ? "browse" : mode === "list" ? "list" : "inspector";
-    const next = moveFocus({ panel, cardIndex, home: group === "home", width: renderer.width }, name);
+  if ((name === "left" || name === "right" || (navigation.cardsFocused && name === "down"))) {
+    const panel: FocusState["panel"] = navigation.cardsFocused ? "cards" : navigation.mode === "browse" ? "browse" : navigation.mode === "list" ? "list" : "inspector";
+    const next = moveFocus({ panel, cardIndex: navigation.cardIndex, home: group === "home", width: renderer.width }, name);
     if (panel === "browse" && next.panel !== "browse") {
       const active = navItems.findIndex((item) => item.source === source && item.group === group);
       if (active >= 0) navIndex = active;
     }
-    cardIndex = next.cardIndex;
-    cardsFocused = next.panel === "cards";
+    navigate({ type: "cards", focused: next.panel === "cards", index: next.cardIndex });
     if (next.panel === "inspector" && panel === "list") {
-      const task = visible.find((t) => t.Key === selected);
+      const task = visible.find((t) => t.Key === navigation.selected);
       if (task) { openTask(task); return; }
     } else if (next.panel === "browse") navigate({ type: "focus", mode: "browse" });
     else if (next.panel === "list") {
       navigate({ type: "focus", mode: "list" });
-      if (!visible.some((task) => task.Key === selected)) listTasks();
-      const task = visible.find((t) => t.Key === selected);
+      if (!visible.some((task) => task.Key === navigation.selected)) listTasks();
+      const task = visible.find((t) => t.Key === navigation.selected);
       if (task && renderer.width >= 80) {
         navigate({ type: "select", task });
       }
@@ -1060,23 +1048,23 @@ renderer.keyInput.on("keypress", (key) => {
     render();
     return;
   }
-  if (cardsFocused) {
+  if (navigation.cardsFocused) {
     if (name === "return") {
-      cardsFocused = false;
-      chooseBrowse({ source, group: `status:${taskStatuses[cardIndex]}` });
+      navigate({ type: "cards", focused: false });
+      chooseBrowse({ source, group: `status:${taskStatuses[navigation.cardIndex]}` });
       return;
     }
-    if (name === "escape") { cardsFocused = false; navigate({ type: "focus", mode: "browse" }); render(); return; }
+    if (name === "escape") { navigate({ type: "cards", focused: false }); navigate({ type: "focus", mode: "browse" }); render(); return; }
     if (!["a", "/", "?", "q", "d", "r"].includes(name)) return;
-    if (["a", "/"].includes(name)) cardsFocused = false;
+    if (["a", "/"].includes(name)) navigate({ type: "cards", focused: false });
   }
-  if (group === "home" && name === "up" && ((mode === "list" && visible.findIndex((t) => t.Key === selected) <= 0) || (["detail", "history"].includes(mode) && (scroll?.scrollTop || 0) === 0) || (mode === "links" && linkIndex === 0))) {
-    cardsFocused = true;
+  if (group === "home" && name === "up" && ((navigation.mode === "list" && visible.findIndex((t) => t.Key === navigation.selected) <= 0) || (["detail", "history"].includes(navigation.mode) && (scroll?.scrollTop || 0) === 0) || (navigation.mode === "links" && linkIndex === 0))) {
+    navigate({ type: "cards", focused: true });
     navigate({ type: "focus", mode: "list" });
     render();
     return;
   }
-  if (["detail", "links", "history"].includes(mode) && ["u", "i", "o"].includes(name) && opened) {
+  if (["detail", "links", "history"].includes(navigation.mode) && ["u", "i", "o"].includes(name) && navigation.opened) {
     if (name === "o") showHistory();
     else { navigate({ type: "focus", mode: name === "u" ? "detail" : "links" }); linkIndex = 0; linkError = ""; render(); }
     return;
@@ -1086,13 +1074,12 @@ renderer.keyInput.on("keypress", (key) => {
     return;
   }
   if (name === "escape") {
-    if (!["detail", "links", "history"].includes(mode)) backFromTask();
+    if (!["detail", "links", "history"].includes(navigation.mode)) backFromTask();
     return;
   }
   if (name === "?") {
-    helpPanel = cardsFocused ? "cards" : mode as HelpPanel;
-    modalReturnMode = mode as typeof modalReturnMode;
-    mode = "help";
+    helpPanel = navigation.cardsFocused ? "cards" : navigation.mode as HelpPanel;
+    navigate({ type: "modal", modal: "help" });
     render();
     return;
   }
@@ -1105,8 +1092,7 @@ renderer.keyInput.on("keypress", (key) => {
   }
   if (name === "a") {
     key.preventDefault();
-    modalReturnMode = mode as typeof modalReturnMode;
-    mode = "add";
+    navigate({ type: "modal", modal: "add" });
     render();
     return;
   }
@@ -1124,9 +1110,9 @@ renderer.keyInput.on("keypress", (key) => {
     return;
   }
   if (
-    inspecting &&
+    navigation.inspecting &&
     renderer.width < 150 &&
-    ["detail", "links", "history"].includes(mode) &&
+    ["detail", "links", "history"].includes(navigation.mode) &&
     name === "e"
   ) {
     navigate({ type: "expand" });
@@ -1134,10 +1120,10 @@ renderer.keyInput.on("keypress", (key) => {
     return;
   }
   if (
-    ["detail", "links", "history"].includes(mode) &&
+    ["detail", "links", "history"].includes(navigation.mode) &&
     (name === "pageup" || name === "pagedown")
   ) {
-    const current = visible.findIndex((t) => t.Key === opened?.Key);
+    const current = visible.findIndex((t) => t.Key === navigation.opened?.Key);
     const next = current + (name === "pagedown" ? 1 : -1);
     if (current >= 0 && visible[next]) {
       if (showInspector() && taskListScroll) {
@@ -1150,7 +1136,7 @@ renderer.keyInput.on("keypress", (key) => {
     }
     return;
   }
-  if (mode === "links") {
+  if (navigation.mode === "links") {
     if (name === "up" || name === "down") {
       linkIndex = Math.max(
         0,
@@ -1168,7 +1154,7 @@ renderer.keyInput.on("keypress", (key) => {
       return;
     }
   }
-  if (mode === "browse") {
+  if (navigation.mode === "browse") {
     if (
       ["up", "down", "home", "end", "pageup", "pagedown"].includes(name)
     ) {
@@ -1200,8 +1186,8 @@ renderer.keyInput.on("keypress", (key) => {
     }
     return;
   }
-  if (mode === "list") {
-    let i = visible.findIndex((t) => t.Key === selected);
+  if (navigation.mode === "list") {
+    let i = visible.findIndex((t) => t.Key === navigation.selected);
     if (name === "return") {
       if (visible[i]) openTask(visible[i]);
       return;
@@ -1210,7 +1196,7 @@ renderer.keyInput.on("keypress", (key) => {
     )
       i = navigationTarget(taskListScroll, i, visible.length, name);
     else return;
-    const previous = visible.findIndex((t) => t.Key === selected);
+    const previous = visible.findIndex((t) => t.Key === navigation.selected);
     if (previous !== i) navigate({ type: "select", task: visible[i] || null });
     selectTask(taskListScroll, previous, i);
     if (previous !== i && visible[i] && renderer.width >= 80) {
@@ -1227,7 +1213,7 @@ renderer.keyInput.on("keypress", (key) => {
     if (name === "pageup") scroll.scrollBy(-10);
   }
 });
-renderer.on("resize", () => { navigate({ type: "resize", width: renderer.width }); listTasks(opened && !visible.some((task) => task.Key === selected) ? opened : undefined); render(); });
+renderer.on("resize", () => { navigate({ type: "resize", width: renderer.width }); listTasks(navigation.opened && !visible.some((task) => task.Key === navigation.selected) ? navigation.opened : undefined); render(); });
 if (!cli.taskId) {
   const cached = await snapshots.readCached();
   if (cached) {

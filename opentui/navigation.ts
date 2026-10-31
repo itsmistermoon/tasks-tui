@@ -125,9 +125,12 @@ export function panelLayout(width: number, mode: string, cardsFocused: boolean, 
 }
 
 export type InspectorTab = "detail" | "links" | "history";
+export type NavigationMode = "browse" | "list" | InspectorTab | "help" | "add";
 export type NavigationState = {
   selected: string; opened: Task | null; inspectorMode: InspectorTab;
-  inspecting: boolean; expanded: boolean; mode: string;
+  inspecting: boolean; expanded: boolean; mode: NavigationMode;
+  modalReturnMode: Exclude<NavigationMode, "help" | "add">;
+  cardsFocused: boolean; cardIndex: number;
 };
 export type NavigationAction =
   | { type: "sync"; tasks: Task[]; width: number; preview: boolean; preserve?: Task }
@@ -135,6 +138,9 @@ export type NavigationAction =
   | { type: "focus"; mode: "browse" | "list" | InspectorTab }
   | { type: "expand" }
   | { type: "resize"; width: number }
+  | { type: "modal"; modal: "help" | "add" }
+  | { type: "dismiss" }
+  | { type: "cards"; focused: boolean; index?: number }
   | { type: "close" };
 
 export function transitionNavigation(state: NavigationState, action: NavigationAction): NavigationState {
@@ -146,6 +152,11 @@ export function transitionNavigation(state: NavigationState, action: NavigationA
       next.opened = task && open ? structuredClone(task) : null;
       next.inspecting = !!next.opened;
       if (changed || !task) next.inspectorMode = "detail";
+      if (changed) {
+        next.expanded = false;
+        if (["detail", "links", "history"].includes(next.modalReturnMode))
+          next.modalReturnMode = task && open ? "detail" : "list";
+      }
       if (["detail", "links", "history"].includes(next.mode) && changed)
         next.mode = task && open ? next.inspectorMode : "list";
     }
@@ -161,6 +172,13 @@ export function transitionNavigation(state: NavigationState, action: NavigationA
   } else if (action.type === "focus") {
     next.mode = action.mode;
     if (["detail", "links", "history"].includes(action.mode)) next.inspectorMode = action.mode as InspectorTab;
+  } else if (action.type === "modal") {
+    if (next.mode !== "help" && next.mode !== "add") next.modalReturnMode = next.mode;
+    next.mode = action.modal;
+  } else if (action.type === "dismiss") next.mode = next.modalReturnMode;
+  else if (action.type === "cards") {
+    next.cardsFocused = action.focused;
+    if (action.index !== undefined) next.cardIndex = action.index;
   } else if (action.type === "expand") next.expanded = !next.expanded;
   else if (action.type === "resize" && action.width >= 150) next.expanded = false;
   else if (action.type === "close") {

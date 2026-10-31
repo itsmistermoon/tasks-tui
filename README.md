@@ -1,8 +1,8 @@
 # tasks-tui
 
-A read-only terminal viewer for [tasks-axi](https://github.com/kunchenguid/tasks-axi) backlogs, built with [OpenTUI](https://opentui.com/).
+A terminal viewer and manager for [tasks-axi](https://github.com/kunchenguid/tasks-axi) backlogs, built with [OpenTUI](https://opentui.com/).
 
-Browse work across backlogs, search task notes, and inspect the context behind a task without leaving the terminal. The Markdown files remain the source of truth; use `tasks-axi` when you want to change them.
+Browse work across backlogs, search task notes, inspect the context behind a task, and change it without leaving the terminal. The Markdown files remain the source of truth; every change is made by running `tasks-axi`.
 
 ## Why
 
@@ -66,6 +66,28 @@ Select a task and press `Enter` or move right to open the inspector. On a wide t
 - With the inspector focused, press `u` for details, `i` for links and related tasks, or `o` for note history.
 - In Links, use the arrow keys to select an entry and `Enter` to open it. Web links open in your browser, local report paths open with your system's default application, and task dependencies open in the viewer.
 
+## Change a task
+
+Select a task in the list or inspector and press `x` to open its actions. Move with `j` / `k` and press `Enter`, or press the key shown beside an action. `Esc` closes the menu.
+
+| Key | Action | `tasks-axi` command | Confirmation |
+| --- | --- | --- | --- |
+| `s` | Start a queued task | `start <id>` | No |
+| `d` | Mark done, without archiving older done tasks | `done <id> --no-prune` | No |
+| `r` | Reopen a done or in-flight task | `reopen <id>` | No |
+| `h` | Hold with a reason, or remove the hold | `hold <id> --reason <text>` / `unhold <id>` | No |
+| `b` | Block by another task | `block <id> --by <other>` | No |
+| `u` | Remove a blocking task | `unblock <id> --by <other>` | No |
+| `t` | Edit the title | `update <id> --title <text>` | Yes |
+| `n` | Replace the notes, archiving the previous notes | `update <id> --body <text> --archive-body` | Yes |
+| `m` | Move to another backlog | `mv <id> --to <path>` | Yes |
+| `P` | Archive all but the most recent done tasks in the backlog | `prune --keep <n> --state done` | Yes |
+| `D` | Delete the task | `rm <id>` | Yes |
+
+The menu lists only the actions that apply to the task's current state; archived tasks have none. Actions that need a value, such as a hold reason, ask for it first. Actions that cannot be undone, or that affect several tasks, open a dialog that asks the question (for example "delete task a1?"), warns what will be lost or affected, and shows the exact command; press `y` to run it or `n` / `Esc` to cancel. Any other key leaves the dialog open. There is no setting or shortcut that skips this confirmation.
+
+Each action runs `tasks-axi <command> --file <backlog> --json` against the task's own backlog, so locking, formatting, and validation remain the responsibility of `tasks-axi`. The result appears at the top of the screen: an `ok:` summary, or the `tasks-axi` error exactly as it was printed. Press `Esc` to dismiss it. The view then reloads and keeps the task selected.
+
 ## Keyboard
 
 | Key | Action |
@@ -75,13 +97,14 @@ Select a task and press `Enter` or move right to open the inspector. On a wide t
 | `Home` / `End` | Go to the first or last item |
 | `Page Up` / `Page Down` | Move by page in a list; change task in the inspector or detail view |
 | `Enter` | Open a task, choose a browse option, or open a selected link |
+| `x` | Open the actions for the selected task |
 | `u` / `i` / `o` | Select details, links, or note history when the inspector is focused |
 | `e` | Toggle inspector expansion on smaller terminals |
 | `/` | Filter the current view |
 | `d` | Show or hide completed and archived tasks |
 | `a` | Add a backlog file or directory |
 | `r` | Refresh sources or reload changed task details |
-| `Esc` | Close a dialog, clear the filter, or return from status cards |
+| `Esc` | Close a dialog, dismiss an action result, clear the filter, or return from status cards |
 | `?` | Open help |
 | `q` / `Ctrl+C` | Quit |
 
@@ -97,11 +120,11 @@ The viewer can show a cached snapshot at startup while it refreshes sources in t
 
 Pruned tasks can be read from `done-archive.md` or the archive configured in `.tasks.toml`. Archived tasks appear in their own group. Older archive entries may not record their original state. Previous note versions are read from `note-archive.md` when available.
 
-## Read-only by design
+## What tasks-tui writes
 
-`tasks-tui` does not create, edit, or change the status of backlog tasks. It saves its own source and view preferences in the operating system's configuration directory. Opening a link delegates to the system's default application.
+`tasks-tui` changes backlogs only through the task actions above, and only by running `tasks-axi`; it never edits backlog files itself. It saves its own source and view preferences in the operating system's configuration directory. Opening a link delegates to the system's default application.
 
-The viewer currently reads through the installed `tasks-axi` package's Markdown parser and view modules. It therefore requires an installed version that provides those modules; see the [tasks-axi repository](https://github.com/kunchenguid/tasks-axi) for the underlying backlog format and CLI.
+Actions run the first `tasks-axi` found on `PATH`. The viewer reads through the installed `tasks-axi` package's Markdown parser and view modules. It therefore requires an installed version that provides those modules; see the [tasks-axi repository](https://github.com/kunchenguid/tasks-axi) for the underlying backlog format and CLI.
 
 ## Development
 

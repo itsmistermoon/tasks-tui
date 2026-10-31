@@ -288,7 +288,7 @@ function render(underlay = false) {
       : overlayMode === "actions"
         ? modalSize(64, actionMenu.length + 6)
         : overlayMode === "confirm"
-          ? modalSize(76, Math.ceil(Bun.stringWidth(command) / 70) + 7)
+          ? modalSize(76, Math.ceil(Bun.stringWidth(command) / 70) + Math.ceil(Bun.stringWidth(actionChoice?.warning || "") / 70) + 9)
           : modalSize(64, 9);
     const { width, height } = size;
     const p = box("modal", {
@@ -306,7 +306,7 @@ function render(underlay = false) {
       shouldFill: true,
     });
     renderer.root.add(p);
-    const modalTitle = line("modal-title", overlayMode === "help" ? "help" : overlayMode === "add" ? "add source" : overlayMode === "actions" ? `actions · ${actionTask?.Data.id}` : `${actionChoice?.label} · ${actionTask?.Data.id}`, activeBorder);
+    const modalTitle = line("modal-title", overlayMode === "help" ? "help" : overlayMode === "add" ? "add source" : overlayMode === "actions" ? `actions · ${actionTask?.Data.id}` : overlayMode === "confirm" ? actionChoice?.question || "" : `${actionChoice?.label} · ${actionTask?.Data.id}`, overlayMode === "confirm" ? "#e8bb65" : activeBorder);
     modalTitle.attributes = 1;
     p.add(modalTitle);
     p.add(line("modal-title-gap", " ", RGBA.fromIndex(8)));
@@ -373,10 +373,12 @@ function render(underlay = false) {
       p.add(box("action-input-spacer", { flexGrow: 1, minHeight: 1 }));
       p.add(keybindBar("action-input-hint", [actionChoice?.confirm ? "↵ review" : "↵ run", "esc cancel"], { paddingRight: 0 }));
     } else if (overlayMode === "confirm") {
+      p.add(text("confirm-warning", actionChoice?.warning || "", RGBA.fromIndex(9), { width: "100%" }));
+      p.add(line("confirm-gap", " ", RGBA.fromIndex(8)));
       p.add(line("confirm-label", "tasks-tui will run:", "#b8bac5"));
       p.add(text("confirm-command", command, "#e8bb65", { width: "100%", wrapMode: "char" }));
       p.add(box("confirm-spacer", { flexGrow: 1, minHeight: 1 }));
-      p.add(keybindBar("confirm-hint", ["y confirm", "n cancel"], { paddingRight: 0 }));
+      p.add(keybindBar("confirm-hint", [`[y] ${actionChoice?.args("")[0]}`, "[n] cancel"], { paddingRight: 0 }));
     } else {
       p.add(text("help-text", helpContent(helpPanel, renderer.width), "#d8d8de", { width: "100%", flexGrow: 1 }));
       const closeHint = box("help-close-row", { flexDirection: "row", justifyContent: "flex-end", width: "100%", height: 1, flexShrink: 0 });

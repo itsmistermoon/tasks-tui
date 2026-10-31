@@ -2,7 +2,7 @@
 
 # Homebrew package for the tasks-tui release archives.
 class TasksTui < Formula
-  desc "Read-only terminal viewer for tasks-axi backlogs"
+  desc "Terminal viewer and manager for tasks-axi backlogs"
   homepage "https://github.com/itsmistermoon/tasks-tui"
   version "0.3.1"
 

@@ -33,18 +33,36 @@ curl -fL "$url" -o "$tmp/tasks-tui.tar.gz" || fail "Could not download $url."
 mkdir "$tmp/package"
 tar -xzf "$tmp/tasks-tui.tar.gz" -C "$tmp/package"
 test -x "$tmp/package/bin/tasks-backend" && test -f "$tmp/package/opentui/app.ts" || fail 'Invalid release archive.'
-printf '%s\n' 'Installing tasks-axi...'
-mkdir "$tmp/package/axi"
-(cd "$tmp/package/axi" && bun add tasks-axi) || fail 'Could not install tasks-axi with Bun.'
-axi_dist="$tmp/package/axi/node_modules/tasks-axi/dist"
-test -f "$axi_dist/bin/tasks-axi.js" && test -f "$axi_dist/src/backends/markdown-grammar.js" && test -f "$axi_dist/src/view.js" || fail 'The installed tasks-axi package lacks required modules.'
-printf '#!/bin/sh\nentry=$0\nif [ -L "$entry" ]; then entry=$(readlink "$entry"); fi\nexec bun "$(dirname "$entry")/tasks-axi.js" "$@"\n' > "$axi_dist/bin/tasks-axi-bun"
-chmod +x "$axi_dist/bin/tasks-axi-bun"
 install_dir="$HOME/.local/share/tasks-tui"
+axi=$(command -v tasks-axi || true)
+if [ -n "$axi" ]; then
+  axi_real=$(bun -e 'process.stdout.write(require("node:fs").realpathSync(process.argv[1]))' "$axi") || fail 'Could not resolve the existing tasks-axi executable.'
+  "$axi" --version >/dev/null 2>&1 || fail 'The existing tasks-axi executable failed; it was not replaced.'
+  bun -e 'const fs = require("node:fs"), path = require("node:path"); const base = path.dirname(path.dirname(process.argv[1])); for (const file of ["src/backends/markdown-grammar.js", "src/view.js"]) fs.accessSync(path.join(base, file));' "$axi_real" || fail 'The existing tasks-axi lacks required parser modules; it was not replaced.'
+  if [ -d "$install_dir/axi" ]; then
+    axi_owned=$(CDPATH= cd -- "$install_dir/axi" && pwd -P)
+    case "$axi_real" in
+      "$axi_owned"/*) mv "$install_dir/axi" "$tmp/package/axi" ;;
+    esac
+  fi
+else
+  if [ -e "$bindir/tasks-axi" ] || [ -L "$bindir/tasks-axi" ]; then
+    fail "Cannot install tasks-axi: $bindir/tasks-axi already exists."
+  fi
+  printf '%s\n' 'Installing tasks-axi...'
+  mkdir "$tmp/package/axi"
+  (cd "$tmp/package/axi" && bun add tasks-axi) || fail 'Could not install tasks-axi with Bun.'
+  axi_dist="$tmp/package/axi/node_modules/tasks-axi/dist"
+  test -f "$axi_dist/bin/tasks-axi.js" && test -f "$axi_dist/src/backends/markdown-grammar.js" && test -f "$axi_dist/src/view.js" || fail 'The installed tasks-axi package lacks required modules.'
+  printf '#!/bin/sh\nentry=$0\nif [ -L "$entry" ]; then entry=$(readlink "$entry"); fi\nexec bun "$(dirname "$entry")/tasks-axi.js" "$@"\n' > "$axi_dist/bin/tasks-axi-bun"
+  chmod +x "$axi_dist/bin/tasks-axi-bun"
+fi
 rm -rf "$install_dir"
 mv "$tmp/package" "$install_dir"
 ln -sf "$install_dir/bin/tasks-tui" "$bindir/tasks-tui"
-ln -sf "$install_dir/axi/node_modules/tasks-axi/dist/bin/tasks-axi-bun" "$bindir/tasks-axi"
+if [ -z "$axi" ]; then
+  ln -s "$install_dir/axi/node_modules/tasks-axi/dist/bin/tasks-axi-bun" "$bindir/tasks-axi"
+fi
 case "${SHELL:-/bin/sh}" in
   */fish) profile="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"; style=fish ;;
   */zsh) profile="$HOME/.zprofile"; style=sh ;;

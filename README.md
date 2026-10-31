@@ -16,7 +16,7 @@ Install on macOS or Linux (arm64 or x64):
 curl -fsSL https://raw.githubusercontent.com/itsmistermoon/tasks-tui/main/install.sh | sh
 ```
 
-The installer downloads a prebuilt release, installs Bun 1.3.14+ when needed, and installs `tasks-axi` using Bun. It installs to `~/.local/share/tasks-tui`, links both commands into `~/.local/bin`, and adds the command and Bun directories to your shell profile. Open a new shell after installation. Set `TASKS_TUI_BIN_DIR` to choose another absolute directory for the commands.
+The installer downloads a prebuilt release, installs Bun 1.3.14+ when needed, and installs `tasks-axi` using Bun if it is missing. It installs to `~/.local/share/tasks-tui`, links `tasks-tui` and, when installed, `tasks-axi` into `~/.local/bin`, and adds the command and Bun directories to your shell profile. Open a new shell after installation. Set `TASKS_TUI_BIN_DIR` to choose another absolute directory for the commands.
 
 Start the viewer from any directory:
 

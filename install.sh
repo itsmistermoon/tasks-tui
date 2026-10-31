@@ -8,6 +8,11 @@ case "$(uname -m)" in arm64|aarch64) arch=arm64 ;; x86_64|amd64) arch=x64 ;; *) 
 bindir=${TASKS_TUI_BIN_DIR:-"$HOME/.local/bin"}
 case "$bindir" in /*) ;; *) fail 'TASKS_TUI_BIN_DIR must be an absolute path.' ;; esac
 install_dir="$HOME/.local/share/tasks-tui"
+if [ -e "$install_dir" ] || [ -L "$install_dir" ]; then
+  if [ -L "$install_dir" ] || [ ! -d "$install_dir" ] || [ ! -f "$install_dir/.tasks-tui-managed" ] || [ -L "$install_dir/.tasks-tui-managed" ]; then
+    fail "Cannot install tasks-tui: $install_dir is not managed by this installer."
+  fi
+fi
 if [ -e "$bindir/tasks-tui" ] || [ -L "$bindir/tasks-tui" ]; then
   if [ ! -L "$bindir/tasks-tui" ] || [ "$(readlink "$bindir/tasks-tui")" != "$install_dir/bin/tasks-tui" ]; then
     fail "Cannot install tasks-tui: $bindir/tasks-tui already exists and is not managed by this installer."
@@ -45,6 +50,7 @@ curl -fL "$url" -o "$tmp/tasks-tui.tar.gz" || fail "Could not download $url."
 mkdir "$tmp/package"
 tar -xzf "$tmp/tasks-tui.tar.gz" -C "$tmp/package"
 test -x "$tmp/package/bin/tasks-backend" && test -f "$tmp/package/opentui/app.ts" || fail 'Invalid release archive.'
+touch "$tmp/package/.tasks-tui-managed"
 if [ -d "$install_dir/axi" ]; then
   cp -R "$install_dir/axi" "$tmp/package/axi"
 fi

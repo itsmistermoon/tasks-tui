@@ -16,7 +16,7 @@ func TestInstallerPreservesTasksAxi(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, location := range []string{"destination", "path", "previous-install", "bash-login", "bash-profile", "zsh", "unseen-axi", "foreign-file", "foreign-link"} {
+	for _, location := range []string{"destination", "path", "previous-install", "bash-login", "bash-profile", "zsh", "unseen-axi", "foreign-file", "foreign-link", "foreign-install-dir", "foreign-install-link"} {
 		t.Run(location, func(t *testing.T) {
 			root := t.TempDir()
 			home := filepath.Join(root, "home")
@@ -105,6 +105,32 @@ func TestInstallerPreservesTasksAxi(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			if location == "previous-install" || location == "unseen-axi" {
+				if err := os.WriteFile(filepath.Join(home, ".local", "share", "tasks-tui", ".tasks-tui-managed"), nil, 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if location == "foreign-install-dir" || location == "foreign-install-link" {
+				install := filepath.Join(home, ".local", "share", "tasks-tui")
+				target := install
+				if location == "foreign-install-link" {
+					target = filepath.Join(root, "foreign-install")
+				}
+				if err := os.MkdirAll(target, 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(target, "important"), []byte("keep"), 0644); err != nil {
+					t.Fatal(err)
+				}
+				if location == "foreign-install-link" {
+					if err := os.MkdirAll(filepath.Dir(install), 0755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Symlink(target, install); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
 			cmd := exec.Command("sh", "install.sh")
 			shell := "/bin/sh"
 			if location == "destination" || location == "bash-login" || location == "bash-profile" {
@@ -131,6 +157,16 @@ func TestInstallerPreservesTasksAxi(t *testing.T) {
 			cmd.Env = append(os.Environ(), "HOME="+home, "SHELL="+shell, "BUN_INSTALL="+filepath.Join(home, ".bun"), "TASKS_TUI_BIN_DIR="+bindir, "FIXTURE_ARCHIVE="+archive, "ZDOTDIR="+home, "PATH="+mocks+":"+os.Getenv("PATH"))
 			if location == "unseen-axi" {
 				cmd.Env = append(cmd.Env, "PATH="+mocks+":/usr/bin:/bin")
+			}
+			if location == "foreign-install-dir" || location == "foreign-install-link" {
+				if out, err := cmd.CombinedOutput(); err == nil {
+					t.Fatalf("expected unmanaged directory conflict: %s", out)
+				}
+				data, err := os.ReadFile(filepath.Join(home, ".local", "share", "tasks-tui", "important"))
+				if err != nil || string(data) != "keep" {
+					t.Fatalf("unmanaged data changed: %s, %v", data, err)
+				}
+				return
 			}
 			if location == "foreign-file" || location == "foreign-link" {
 				target := filepath.Join(bindir, "tasks-tui")

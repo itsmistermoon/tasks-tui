@@ -16,7 +16,7 @@ func TestInstallerPreservesTasksAxi(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, location := range []string{"destination", "path", "previous-install", "bash-login", "bash-profile", "zsh"} {
+	for _, location := range []string{"destination", "path", "previous-install", "bash-login", "bash-profile", "zsh", "unseen-axi", "foreign-file", "foreign-link"} {
 		t.Run(location, func(t *testing.T) {
 			root := t.TempDir()
 			home := filepath.Join(root, "home")
@@ -59,7 +59,7 @@ func TestInstallerPreservesTasksAxi(t *testing.T) {
 				t.Fatal(err)
 			}
 			dist := filepath.Join(root, "existing", "dist")
-			if location == "previous-install" {
+			if location == "previous-install" || location == "unseen-axi" {
 				dist = filepath.Join(home, ".local", "share", "tasks-tui", "axi", "node_modules", "tasks-axi", "dist")
 			}
 			for _, dir := range []string{filepath.Join(dist, "bin"), filepath.Join(dist, "src", "backends")} {
@@ -72,13 +72,22 @@ func TestInstallerPreservesTasksAxi(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			executable := filepath.Join(dist, "bin", "tasks-axi")
+			name := "tasks-axi"
+			if location == "unseen-axi" {
+				name = "tasks-axi-bun"
+			}
+			executable := filepath.Join(dist, "bin", name)
 			if err := os.WriteFile(executable, []byte("#!/bin/sh\nprintf 'existing-version\\n'\n"), 0755); err != nil {
 				t.Fatal(err)
 			}
 			linkDir := bindir
 			if location == "path" {
 				linkDir = mocks
+			} else if location == "unseen-axi" {
+				linkDir = filepath.Join(root, "old-bin")
+				if err := os.MkdirAll(linkDir, 0755); err != nil {
+					t.Fatal(err)
+				}
 			}
 			link := filepath.Join(linkDir, "tasks-axi")
 			if err := os.Symlink(executable, link); err != nil {
@@ -120,6 +129,31 @@ func TestInstallerPreservesTasksAxi(t *testing.T) {
 				}
 			}
 			cmd.Env = append(os.Environ(), "HOME="+home, "SHELL="+shell, "BUN_INSTALL="+filepath.Join(home, ".bun"), "TASKS_TUI_BIN_DIR="+bindir, "FIXTURE_ARCHIVE="+archive, "ZDOTDIR="+home, "PATH="+mocks+":"+os.Getenv("PATH"))
+			if location == "unseen-axi" {
+				cmd.Env = append(cmd.Env, "PATH="+mocks+":/usr/bin:/bin")
+			}
+			if location == "foreign-file" || location == "foreign-link" {
+				target := filepath.Join(bindir, "tasks-tui")
+				foreign := filepath.Join(root, "foreign")
+				if err := os.WriteFile(foreign, []byte("#!/bin/sh\nprintf 'foreign\\n'\n"), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if location == "foreign-file" {
+					if err := os.WriteFile(target, []byte("#!/bin/sh\nprintf 'foreign\\n'\n"), 0755); err != nil {
+						t.Fatal(err)
+					}
+				} else if err := os.Symlink(foreign, target); err != nil {
+					t.Fatal(err)
+				}
+				if out, err := cmd.CombinedOutput(); err == nil {
+					t.Fatalf("expected conflict: %s", out)
+				}
+				out, err := exec.Command(target).Output()
+				if err != nil || strings.TrimSpace(string(out)) != "foreign" {
+					t.Fatalf("foreign command changed: %s, %v", out, err)
+				}
+				return
+			}
 			if location == "previous-install" {
 				mv := "#!/bin/sh\ncase \"$1\" in */package) exit 1 ;; esac\nexec /bin/mv \"$@\"\n"
 				if err := os.WriteFile(filepath.Join(mocks, "mv"), []byte(mv), 0755); err != nil {
@@ -196,6 +230,12 @@ func TestInstallerPreservesTasksAxi(t *testing.T) {
 			out, err := exec.Command(link, "--version").CombinedOutput()
 			if err != nil || strings.TrimSpace(string(out)) != "existing-version" {
 				t.Fatalf("existing executable failed: %s, %v", out, err)
+			}
+			if location == "unseen-axi" {
+				out, err := exec.Command(filepath.Join(bindir, "tasks-axi"), "--version").Output()
+				if err != nil || strings.TrimSpace(string(out)) != "existing-version" {
+					t.Fatalf("new link failed: %s, %v", out, err)
+				}
 			}
 			if location == "path" {
 				if _, err := os.Lstat(filepath.Join(bindir, "tasks-axi")); !os.IsNotExist(err) {

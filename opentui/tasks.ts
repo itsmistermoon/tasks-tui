@@ -14,7 +14,7 @@ export type Snapshot = {
   failed: string[];
 };
 export type TaskStatus =
-  | "In progress"
+  | "In flight"
   | "Queued"
   | "Blocked"
   | "Held"
@@ -36,7 +36,7 @@ export type TaskCounts = {
 };
 
 export const taskStatuses: TaskStatus[] = [
-  "In progress",
+  "In flight",
   "Queued",
   "Blocked",
   "Held",
@@ -45,7 +45,7 @@ export const taskStatuses: TaskStatus[] = [
 ];
 
 export const icons: Record<TaskStatus, string> = {
-  "In progress": "●",
+  "In flight": "●",
   Queued: "○",
   Blocked: "!",
   Held: "⏸",
@@ -53,7 +53,7 @@ export const icons: Record<TaskStatus, string> = {
   Archived: "◌",
 };
 const rank: Record<TaskStatus, number> = {
-  "In progress": 0,
+  "In flight": 0,
   Queued: 1,
   Blocked: 2,
   Held: 3,
@@ -66,7 +66,7 @@ export function status(task: Task): TaskStatus {
   if (task.Data.state === "done") return "Done";
   if (task.Data.held === "yes") return "Held";
   if (task.Data.blocked === "yes") return "Blocked";
-  return task.Data.state === "in_flight" ? "In progress" : "Queued";
+  return task.Data.state === "in_flight" ? "In flight" : "Queued";
 }
 
 export function countTasks(tasks: Task[]): TaskCounts {

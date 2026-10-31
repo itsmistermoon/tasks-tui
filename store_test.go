@@ -87,7 +87,7 @@ func TestCountOutputAndExplicitSource(t *testing.T) {
 	if err := json.Unmarshal([]byte(output.String()), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Total < 2 || got.Statuses["In progress"] < 1 || got.Statuses["Queued"] < 1 {
+	if got.Total < 2 || got.Statuses["In flight"] < 1 || got.Statuses["Queued"] < 1 {
 		t.Fatalf("unexpected count: %#v", got)
 	}
 }

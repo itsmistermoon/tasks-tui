@@ -5,6 +5,7 @@ import {
 } from "@opentui/core";
 import { selectionBackground } from "./panel-theme";
 import { truncateText } from "./truncate";
+import type { Task } from "./tasks";
 
 // Keep the existing scroll container and change only the two affected titles.
 export function selectTask(
@@ -126,4 +127,18 @@ export function panelLayout(width: number, mode: string, cardsFocused: boolean, 
 export type InspectorTab = "detail" | "links" | "history";
 export function tabAfterTaskSelection(previous: string | undefined, next: string, tab: InspectorTab): InspectorTab {
   return previous === next ? tab : "detail";
+}
+
+export function taskSelection(task: Task | null, previous: Task | null, tab: InspectorTab) {
+  return {
+    selected: task?.Key || "",
+    opened: task ? structuredClone(task) : null,
+    inspectorMode: task ? tabAfterTaskSelection(previous?.Key, task.Key, tab) : "detail" as InspectorTab,
+    inspecting: !!task,
+  };
+}
+
+export function selectionAfterRemoval(task: Task | null, previous: Task | null, tab: InspectorTab, mode: string) {
+  const selection = taskSelection(task, previous, tab);
+  return { ...selection, mode: ["detail", "links", "history"].includes(mode) ? (task ? selection.inspectorMode : "list") : mode };
 }

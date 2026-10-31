@@ -12,3 +12,16 @@ test("Browse counts and Backlog share the selected source and completion setting
   expect(shown.tasks.map((t) => t.Key)).toEqual(["one", "two"]);
   expect(shown.browse.find((v) => v.group === "status:All")?.count).toBe(2);
 });
+
+test("Home filters both recent sections before limiting them", () => {
+  const tasks = ["done", "archived"].flatMap((state) =>
+    Array.from({ length: 6 }, (_, i) => ({
+      ...task(`${state}-${i}`, state),
+      Archived: state === "archived",
+      ArchivedAt: `2026-01-0${i + 1}`,
+      Data: { id: `${state}-${i}`, title: i === 0 ? "needle" : "other", state, closed: `2026-01-0${i + 1}` },
+    })),
+  );
+  const view = projectView(tasks, [], { source: "", group: "home", query: "NEEDLE", showDone: false });
+  expect(view.tasks.map((t) => t.Key)).toEqual(["done-0", "archived-0"]);
+});

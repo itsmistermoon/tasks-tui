@@ -19,6 +19,8 @@ import {
   moveFocus,
   panelLayout,
   tabAfterTaskSelection,
+  taskSelection,
+  selectionAfterRemoval,
   type FocusState,
   type InspectorTab,
 } from "./navigation";
@@ -166,13 +168,13 @@ function listTasks() {
   visible = projection.tasks;
   navItems = projection.browse;
   if (!visible.some((task) => task.Key === selected)) {
-    selected = visible[0]?.Key || "";
-    if (mode === "list" && inspecting) {
-      opened = visible[0] ? structuredClone(visible[0]) : null;
-      inspectorMode = "detail";
+    if (opened || inspecting) {
+      const next = selectionAfterRemoval(visible[0] || null, opened, inspectorMode, mode);
+      ({ selected, opened, inspectorMode, inspecting } = next);
+      mode = next.mode as typeof mode;
       pending = null;
       changes = [];
-    }
+    } else selected = visible[0]?.Key || "";
   }
 }
 function nav() {
@@ -185,10 +187,7 @@ function chooseBrowse(v: { source: string; group: string }) {
   expanded = false;
   mode = "list";
   if (visible.length) {
-    inspectorMode = tabAfterTaskSelection(opened?.Key, visible[0].Key, inspectorMode);
-    selected = visible[0].Key;
-    opened = structuredClone(visible[0]);
-    inspecting = renderer.width >= 80;
+    ({ selected, opened, inspectorMode, inspecting } = taskSelection(visible[0], opened, inspectorMode));
     pending = null;
     changes = [];
   } else {
@@ -200,8 +199,7 @@ function chooseBrowse(v: { source: string; group: string }) {
 }
 function openTask(t: Task) {
   const previousMode = mode;
-  const nextInspectorMode = tabAfterTaskSelection(opened?.Key, t.Key, inspectorMode);
-  if (renderer.width >= 150) inspecting = true;
+  inspecting = true;
   if (mode === "list") listScroll = taskListScroll?.scrollTop || 0;
   else if (mode === "detail" && scroll) scroll.scrollTop = 0;
   if (showInspector() && taskListScroll) {
@@ -213,12 +211,10 @@ function openTask(t: Task) {
       updateSticky();
     }
   }
-  selected = t.Key;
-  opened = structuredClone(t);
+  ({ selected, opened, inspectorMode, inspecting } = taskSelection(t, opened, inspectorMode));
   pending = null;
   changes = [];
-  inspectorMode = nextInspectorMode;
-  mode = nextInspectorMode;
+  mode = inspectorMode;
   focus = "list";
   if (previousMode !== mode) render();
   else renderActiveView();

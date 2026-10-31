@@ -5,7 +5,7 @@ export type ViewFilters = { source: string; group: string; query: string; showDo
 
 export function projectView(tasks: Task[], sources: string[], { source, group, query, showDone }: ViewFilters): { tasks: Task[]; browse: BrowseItem[] } {
   const visible = group === "home"
-    ? recentTasks(tasks).filter((task) => !query || JSON.stringify(task.Data).toLowerCase().includes(query.toLowerCase()))
+    ? recentTasks(tasks.filter((task) => !query || JSON.stringify(task.Data).toLowerCase().includes(query.toLowerCase())))
     : filterTasks(tasks, { query, source, group: group === "status:All" ? "" : group, showDone });
   const totals = countTasks(tasks);
   const counts = countTasks(source ? tasks.filter((task) => task.Source === source) : tasks);

@@ -35,3 +35,19 @@ test("the inspector keeps its tab for the same task and resets for a different t
   expect(tabAfterTaskSelection("one", "two", "history")).toBe("detail");
   expect(tabAfterTaskSelection(undefined, "one", "links")).toBe("detail");
 });
+
+test("task selection synchronizes the inspector and enables compact expansion", async () => {
+  const { taskSelection, selectionAfterRemoval, panelLayout } = await import("./navigation");
+  const first = { Key: "one", Source: "a", Archived: false, Data: { title: "one" } };
+  const next = { Key: "two", Source: "a", Archived: false, Data: { title: "two" } };
+  const result = taskSelection(next, first, "history");
+  expect([result.selected, result.opened?.Key, result.inspectorMode, result.inspecting]).toEqual(["two", "two", "detail", true]);
+  for (const mode of ["browse", "history"]) {
+    const replacement = selectionAfterRemoval(next, first, "history", mode);
+    expect([replacement.selected, replacement.opened?.Key, replacement.inspectorMode, replacement.mode]).toEqual(["two", "two", "detail", mode === "browse" ? "browse" : "detail"]);
+  }
+  expect(panelLayout(90, "detail", false, result.inspecting, false).inspector).toBe(true);
+  expect(panelLayout(90, "detail", false, result.inspecting, true).inspector).toBe(false);
+  expect(taskSelection(null, first, "links")).toEqual({ selected: "", opened: null, inspectorMode: "detail", inspecting: false });
+  expect(taskSelection(first, first, "links").inspectorMode).toBe("links");
+});

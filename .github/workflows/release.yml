@@ -1,0 +1,58 @@
+name: Release artifacts
+on:
+  release:
+    types: [published]
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-15, os: darwin, arch: arm64 }
+          - { runner: macos-15-intel, os: darwin, arch: x64 }
+          - { runner: ubuntu-24.04, os: linux, arch: x64 }
+          - { runner: ubuntu-24.04-arm, os: linux, arch: arm64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+        working-directory: opentui
+      - run: go build -o bin/tasks-backend .
+      - name: Bundle tasks-axi
+        run: mkdir axi && (cd axi && bun add tasks-axi@0.2.6)
+      - name: Package
+        run: tar -czf "tasks-tui-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" bin/tasks-tui bin/tasks-backend opentui axi
+      - name: Upload release artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" "tasks-tui-${{ matrix.os }}-${{ matrix.arch }}.tar.gz"
+  update-homebrew:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Download release archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$GITHUB_REF_NAME" --pattern 'tasks-tui-*.tar.gz' --dir "$RUNNER_TEMP/archives"
+      - name: Update formula on main
+        run: |
+          python3 scripts/update-formula.py "$GITHUB_REF_NAME" "$RUNNER_TEMP/archives" Formula/tasks-tui.rb
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Formula/tasks-tui.rb
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Update Homebrew formula for $GITHUB_REF_NAME"
+          git push origin HEAD:main || { echo '::error::Could not update main. If main is protected, update the formula through a pull request.'; exit 1; }

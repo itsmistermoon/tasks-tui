@@ -10,33 +10,37 @@ A task's title is only part of the picture. Its status, dependencies, hold reaso
 
 ## Quick start
 
-You'll need Bun, Node.js 20 or later, Go 1.27.3 or later, and `tasks-axi` on your `PATH`. Install `tasks-axi` if you don't already have it:
+Install on macOS or Linux (arm64 or x64):
 
 ```sh
-npm install -g tasks-axi
+curl -fsSL https://raw.githubusercontent.com/itsmistermoon/tasks-tui/main/install.sh | sh
 ```
 
-From the `tasks-tui` project directory, install the frontend dependencies and build the local backend:
+The installer downloads a prebuilt release, installs Bun 1.3.14+ when needed, and installs `tasks-axi` using Bun if it is missing. It installs to `~/.local/share/tasks-tui`, links `tasks-tui` and, when installed, `tasks-axi` into `~/.local/bin`, and adds the command and Bun directories to your shell profile. Open a new shell after installation. Set `TASKS_TUI_BIN_DIR` to choose another absolute directory for the commands.
+
+Alternatively, install with Homebrew (available after the first release containing the prebuilt archives):
 
 ```sh
-cd opentui && bun install && cd ..
-go build -o bin/tasks-backend .
+brew tap itsmistermoon/tasks-tui https://github.com/itsmistermoon/tasks-tui
+brew install itsmistermoon/tasks-tui/tasks-tui
 ```
 
-Start the viewer from the project directory:
+Homebrew installs Bun and Node as dependencies. The release archive includes a private, pinned copy of `tasks-axi` for the viewer; it does not alter a globally installed `tasks-axi`.
+
+Start the viewer from any directory:
 
 ```sh
-./bin/tasks-tui
+tasks-tui
 ```
 
 You can also pass one or more backlog files or project directories. Use `--task <id>` to open a task directly; if the id is not found, the viewer displays a warning and opens the task list.
 
 | Usage | Description |
 | --- | --- |
-| `./bin/tasks-tui [backlog.md | directory ...]` | Open the task list using discovered and specified sources |
-| `./bin/tasks-tui --task <id> [backlog.md | directory ...]` | Open the matching task detail, using the specified sources |
-| `./bin/tasks-tui --count [backlog.md | directory ...]` | Print the total and counts by status without opening the viewer |
-| `./bin/tasks-tui --count --json [backlog.md | directory ...]` | Print total, counts by status, and counts per backlog as JSON |
+| `tasks-tui [backlog.md | directory ...]` | Open the task list using discovered and specified sources |
+| `tasks-tui --task <id> [backlog.md | directory ...]` | Open the matching task detail, using the specified sources |
+| `tasks-tui --count [backlog.md | directory ...]` | Print the total and counts by status without opening the viewer |
+| `tasks-tui --count --json [backlog.md | directory ...]` | Print total, counts by status, and counts per backlog as JSON |
 
 Press `?` for help, `/` to search.
 
@@ -47,11 +51,11 @@ The viewer starts in Home, showing up to five recently completed and five recent
 `--count` reads the same discovered or explicitly supplied backlogs as the viewer and prints one line with the default visible total (in progress, queued, blocked, and held) and counts for all six statuses: in progress, queued, blocked, held, done, and archived. Add `--json` for machine-readable counts, including `total_all` (including done and archived), the per-backlog breakdown, and an `errors` list:
 
 ```sh
-./bin/tasks-tui --count
-./bin/tasks-tui --count --json ~/projects/my-app
+tasks-tui --count
+tasks-tui --count --json ~/projects/my-app
 ```
 
-When a backlog cannot be read, its error is printed to stderr and included in the JSON `errors` list. Counts include readable backlogs; the command succeeds if at least one backlog is readable and fails if none are. The short output can be used directly in a panel or status bar, for example `./bin/tasks-tui --count | cut -d '·' -f 1-3`. The JSON output can be consumed by a panel that needs a particular status or backlog. Counting is read-only and does not change backlog files.
+When a backlog cannot be read, its error is printed to stderr and included in the JSON `errors` list. Counts include readable backlogs; the command succeeds if at least one backlog is readable and fails if none are. The short output can be used directly in a panel or status bar, for example `tasks-tui --count | cut -d '·' -f 1-3`. The JSON output can be consumed by a panel that needs a particular status or backlog. Counting is read-only and does not change backlog files.
 
 ## Inspect a task
 
@@ -101,13 +105,23 @@ The viewer currently reads through the installed `tasks-axi` package's Markdown 
 
 ## Development
 
+Install Bun 1.3.14+, Node.js 20+, Go 1.27.3+, and `tasks-axi` (`npm install -g tasks-axi`). From the project root:
+
+```sh
+(cd opentui && bun install)
+go build -o bin/tasks-backend .
+./bin/tasks-tui
+```
+
 ```sh
 # Backend checks
 go test ./...
 go vet ./...
 
 # Frontend checks
-bun test
+(cd opentui && bun test)
 ```
 
 The OpenTUI frontend lives in `opentui/`. The Go backend discovers sources, reads snapshots, serves archived note history, and provides task counts.
+
+The release workflow builds all four archives and updates the Homebrew formula on `main` with their SHA-256 checksums using `GITHUB_TOKEN`. If `main` is protected, the update fails visibly and the formula must be updated through a pull request.

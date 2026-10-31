@@ -101,7 +101,7 @@ func readBatch(file string, live, archive []byte) ([]Task, error) {
 	input, _ := json.Marshal(map[string]string{"live": string(live), "archive": string(archive)})
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "node", "--input-type=module", "-e", batchReader, dist)
+	cmd := exec.CommandContext(ctx, "bun", "--input-type=module", "-e", batchReader, dist)
 	cmd.Stdin = strings.NewReader(string(input))
 	output, e := cmd.Output()
 	if e != nil {

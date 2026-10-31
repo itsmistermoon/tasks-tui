@@ -39,6 +39,22 @@ func TestCLIReadAndArchive(t *testing.T) {
 		t.Fatalf("refresh failed: %v %#v", e, ts)
 	}
 }
+func TestReaderWorksWithoutNode(t *testing.T) {
+	bun, err := exec.LookPath("bun")
+	if err != nil { t.Fatal(err) }
+	axi, err := exec.LookPath("tasks-axi")
+	if err != nil { t.Fatal(err) }
+	dir := t.TempDir()
+	for name, target := range map[string]string{"bun": bun, "tasks-axi": axi} {
+		if err := os.Symlink(target, filepath.Join(dir, name)); err != nil { t.Fatal(err) }
+	}
+	t.Setenv("PATH", dir)
+	tasks, err := readBatch("backlog.md", []byte("## Queued\n- [ ] sample - Example task\n"), nil)
+	if err != nil || len(tasks) != 1 || tasks[0].Get("id") != "sample" {
+		t.Fatalf("reader failed without Node: %#v, %v", tasks, err)
+	}
+}
+
 func TestDiscoverDeduplicates(t *testing.T) {
 	d := t.TempDir()
 	p := filepath.Join(d, "backlog.md")

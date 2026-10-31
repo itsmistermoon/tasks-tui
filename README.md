@@ -16,9 +16,7 @@ Install on macOS or Linux (arm64 or x64):
 curl -fsSL https://raw.githubusercontent.com/itsmistermoon/tasks-tui/main/install.sh | sh
 ```
 
-The installer downloads a prebuilt release and checks for Bun 1.3.14+, Node.js 20+, and `tasks-axi`, printing installation instructions if any are missing. It installs to `~/.local/share/tasks-tui` and links the command into `~/.local/bin`. If that directory is not on your `PATH`, the installer prints the command to add it before retrying. Set `TASKS_TUI_BIN_DIR` to use another directory already on your `PATH`.
-
-Release artifacts will be available starting with the first release published after the installer is merged; v0.2.0 does not include them.
+The installer downloads a prebuilt release, installs Bun 1.3.14+ when needed, and installs `tasks-axi` using Bun. It installs to `~/.local/share/tasks-tui`, links both commands into `~/.local/bin`, and adds the command and Bun directories to your shell profile. Open a new shell after installation. Set `TASKS_TUI_BIN_DIR` to choose another absolute directory for the commands.
 
 Start the viewer from any directory:
 

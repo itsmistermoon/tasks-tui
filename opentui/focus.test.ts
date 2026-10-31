@@ -36,18 +36,50 @@ test("the inspector keeps its tab for the same task and resets for a different t
   expect(tabAfterTaskSelection(undefined, "one", "links")).toBe("detail");
 });
 
-test("task selection synchronizes the inspector and enables compact expansion", async () => {
-  const { taskSelection, selectionAfterRemoval, panelLayout } = await import("./navigation");
-  const first = { Key: "one", Source: "a", Archived: false, Data: { title: "one" } };
-  const next = { Key: "two", Source: "a", Archived: false, Data: { title: "two" } };
-  const result = taskSelection(next, first, "history");
-  expect([result.selected, result.opened?.Key, result.inspectorMode, result.inspecting]).toEqual(["two", "two", "detail", true]);
+const first = { Key: "one", Source: "a", Archived: false, Data: { title: "one" } };
+const second = { Key: "two", Source: "a", Archived: false, Data: { title: "two" } };
+const state = { selected: "one", opened: first, inspectorMode: "history" as const, inspecting: true, expanded: false, mode: "browse" };
+
+test("refresh replaces selection and resets the tab in Browse and inspector", async () => {
+  const { transitionNavigation } = await import("./navigation");
   for (const mode of ["browse", "history"]) {
-    const replacement = selectionAfterRemoval(next, first, "history", mode);
-    expect([replacement.selected, replacement.opened?.Key, replacement.inspectorMode, replacement.mode]).toEqual(["two", "two", "detail", mode === "browse" ? "browse" : "detail"]);
+    const next = transitionNavigation({ ...state, mode }, { type: "sync", tasks: [second], width: 160, preview: true });
+    expect([next.selected, next.opened?.Key, next.inspectorMode, next.mode]).toEqual(["two", "two", "detail", mode === "browse" ? "browse" : "detail"]);
   }
-  expect(panelLayout(90, "detail", false, result.inspecting, false).inspector).toBe(true);
-  expect(panelLayout(90, "detail", false, result.inspecting, true).inspector).toBe(false);
-  expect(taskSelection(null, first, "links")).toEqual({ selected: "", opened: null, inspectorMode: "detail", inspecting: false });
-  expect(taskSelection(first, first, "links").inspectorMode).toBe("links");
+});
+
+test("empty results and restored results synchronize the preview", async () => {
+  const { transitionNavigation } = await import("./navigation");
+  const empty = transitionNavigation(state, { type: "sync", tasks: [], width: 160, preview: true });
+  expect([empty.selected, empty.opened]).toEqual(["", null]);
+  const restored = transitionNavigation(empty, { type: "sync", tasks: [second], width: 160, preview: true });
+  expect([restored.selected, restored.opened?.Key, restored.inspectorMode]).toEqual(["two", "two", "detail"]);
+});
+
+test("opening tasks enables compact expansion for all entry paths", async () => {
+  const { transitionNavigation } = await import("./navigation");
+  for (const mode of ["list", "inspector"] as const) {
+    const opened = transitionNavigation({ ...state, selected: "", opened: null, inspecting: false }, { type: "select", task: first, mode });
+    expect(opened.inspecting).toBe(true);
+    const focused = transitionNavigation(opened, { type: "focus", mode: "detail" });
+    expect(transitionNavigation(focused, { type: "expand" }).expanded).toBe(true);
+  }
+});
+
+test("leaving any inspector tab clears expansion and restores the split", async () => {
+  const { transitionNavigation, panelLayout } = await import("./navigation");
+  for (const mode of ["detail", "links", "history"]) {
+    const next = transitionNavigation({ ...state, mode, expanded: true }, { type: "focus", mode: "list" });
+    expect(next.expanded).toBe(false);
+    expect(panelLayout(90, next.mode, false, next.inspecting, next.expanded).inspector).toBe(true);
+  }
+});
+
+test("resizing to full width initializes the selected preview immediately", async () => {
+  const { transitionNavigation } = await import("./navigation");
+  const compact = transitionNavigation({ ...state, selected: "", opened: null, inspecting: false }, { type: "sync", tasks: [first], width: 70, preview: true });
+  expect(compact.opened).toBeNull();
+  const resized = transitionNavigation(compact, { type: "resize", width: 160 });
+  const next = transitionNavigation(resized, { type: "sync", tasks: [first], width: 160, preview: true });
+  expect([next.selected, next.opened?.Key, next.inspecting]).toEqual(["one", "one", true]);
 });

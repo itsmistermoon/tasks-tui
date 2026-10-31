@@ -18,9 +18,8 @@ import {
   restoreTaskViewport,
   moveFocus,
   panelLayout,
-  tabAfterTaskSelection,
-  taskSelection,
-  selectionAfterRemoval,
+  transitionNavigation,
+  type NavigationAction,
   type FocusState,
   type InspectorTab,
 } from "./navigation";
@@ -144,7 +143,6 @@ let data: Snapshot = { tasks: [], sources: [], errors: [], failed: [] },
   stickyText: TextRenderable | null = null,
   sections: { id: string; name: string }[] = [];
 let taskLookupPending = !!cli.taskId, taskLookupWarning = "";
-let initialPreviewPending = !cli.taskId;
 let showingCachedSnapshot = false;
 let helpPanel: HelpPanel = "browse";
 let cardsFocused = false, cardIndex = 0;
@@ -163,19 +161,18 @@ const text = (
   });
 const box = (id: string, opts: any = {}) =>
   new BoxRenderable(renderer, { id, flexDirection: "column", ...opts });
+function navigate(action: NavigationAction) {
+  const previous = selected;
+  const next = transitionNavigation({ selected, opened, inspectorMode, inspecting, expanded, mode }, action);
+  ({ selected, opened, inspectorMode, inspecting, expanded } = next);
+  mode = next.mode as typeof mode;
+  if (previous !== selected) { pending = null; changes = []; }
+}
 function listTasks() {
   const projection = projectView(data.tasks, data.sources, { query, source, group, showDone });
   visible = projection.tasks;
   navItems = projection.browse;
-  if (!visible.some((task) => task.Key === selected)) {
-    if (opened || inspecting) {
-      const next = selectionAfterRemoval(visible[0] || null, opened, inspectorMode, mode);
-      ({ selected, opened, inspectorMode, inspecting } = next);
-      mode = next.mode as typeof mode;
-      pending = null;
-      changes = [];
-    } else selected = visible[0]?.Key || "";
-  }
+  navigate({ type: "sync", tasks: visible, width: renderer.width, preview: !taskLookupPending });
 }
 function nav() {
   navIndex = Math.min(navIndex, Math.max(0, navItems.length - 1));
@@ -184,25 +181,17 @@ function chooseBrowse(v: { source: string; group: string }) {
   source = v.source;
   group = v.group;
   listTasks();
-  expanded = false;
-  mode = "list";
-  if (visible.length) {
-    ({ selected, opened, inspectorMode, inspecting } = taskSelection(visible[0], opened, inspectorMode));
-    pending = null;
-    changes = [];
-  } else {
-    inspecting = false;
-    opened = null;
-  }
+  navigate({ type: "select", task: visible[0] || null, mode: "list" });
+  pending = null;
+  changes = [];
   listScroll = 0;
   render();
 }
 function openTask(t: Task) {
   const previousMode = mode;
-  inspecting = true;
   if (mode === "list") listScroll = taskListScroll?.scrollTop || 0;
   else if (mode === "detail" && scroll) scroll.scrollTop = 0;
-  if (showInspector() && taskListScroll) {
+  if (panelLayout(renderer.width, mode, cardsFocused, true, expanded).inspector && taskListScroll) {
     const previous = visible.findIndex((item) => item.Key === selected),
       next = visible.findIndex((item) => item.Key === t.Key);
     if (next >= 0) {
@@ -211,23 +200,19 @@ function openTask(t: Task) {
       updateSticky();
     }
   }
-  ({ selected, opened, inspectorMode, inspecting } = taskSelection(t, opened, inspectorMode));
+  navigate({ type: "select", task: t, mode: "inspector" });
   pending = null;
   changes = [];
-  mode = inspectorMode;
   focus = "list";
   if (previousMode !== mode) render();
   else renderActiveView();
 }
 function backFromTask() {
   if (inspecting && expanded) {
-    expanded = false;
+    navigate({ type: "expand" });
     render();
   } else {
-    inspecting = false;
-    expanded = false;
-    mode = "list";
-    opened = null;
+    navigate({ type: "close" });
     render();
   }
 }
@@ -264,8 +249,6 @@ function clearRoot() {
   }
 }
 function render() {
-  if (inspecting && ["detail", "links", "history"].includes(mode))
-    inspectorMode = mode as typeof inspectorMode;
   listTasks();
   nav();
   if (mode !== "browse" || cardsFocused) {
@@ -742,7 +725,6 @@ function populateTaskPanel(
 }
 function renderActiveView() {
   if (!showInspector() || !inspectorArea || !inspectorPanel || inspectorArea.isDestroyed || !opened) { render(); return; }
-  if (inspecting && ["detail", "links", "history"].includes(mode)) inspectorMode = mode as typeof inspectorMode;
   const listPanel = renderer.root.findDescendantById("list-panel");
   if (listPanel instanceof BoxRenderable) listPanel.borderColor = mode === "list" && !cardsFocused ? activeBorder : inactiveBorder;
   const heading = renderer.root.findDescendantById("panel-heading");
@@ -913,16 +895,6 @@ function updateSticky() {
       stickyText.content = v;
   }
 }
-function initializePreview() {
-  if (!initialPreviewPending || renderer.width < 150) return;
-  listTasks();
-  if (visible[0]) {
-    selected = visible[0].Key;
-    opened = structuredClone(visible[0]);
-    inspecting = true;
-    initialPreviewPending = false;
-  }
-}
 const snapshots = new SnapshotClient(backend, cli.sources, snapshotCachePath(cli.sources, settings.sources));
 async function refresh() {
   if (loading) return;
@@ -933,13 +905,11 @@ async function refresh() {
     if (opened) {
       const t = next.tasks.find((x) => x.Key === opened!.Key);
       if (showingCachedSnapshot && t) {
-        opened = structuredClone(t);
+        navigate({ type: "select", task: t });
         changes = [];
         pending = null;
       } else if (showingCachedSnapshot && !t) {
-        opened = null;
-        inspecting = false;
-        initialPreviewPending = true;
+        navigate({ type: "select", task: null });
       } else if (t) {
         changes = Object.keys({ ...opened.Data, ...t.Data }).filter(
           (k) => JSON.stringify(opened!.Data[k]) !== JSON.stringify(t.Data[k]),
@@ -968,7 +938,7 @@ async function refresh() {
         taskLookupChanged = true;
       }
     }
-    initializePreview();
+    listTasks();
     if ((changed || taskLookupChanged || hadCachedSnapshot) && focus !== "search" && mode !== "add" && mode !== "help")
       render();
   } catch (e) {
@@ -1018,7 +988,7 @@ async function activateLink(index: number) {
 async function showHistory() {
   if (!opened) return;
   const key = opened.Key;
-  mode = "history";
+  navigate({ type: "focus", mode: "history" });
   historyText = "loading…";
   renderActiveView();
   const p = Bun.spawn(
@@ -1073,15 +1043,13 @@ renderer.keyInput.on("keypress", (key) => {
     cardsFocused = next.panel === "cards";
     if (next.panel === "inspector" && panel === "list") {
       const task = visible.find((t) => t.Key === selected);
-      if (task) { inspecting = true; openTask(task); return; }
-    } else if (next.panel === "browse") mode = "browse";
+      if (task) { openTask(task); return; }
+    } else if (next.panel === "browse") navigate({ type: "focus", mode: "browse" });
     else if (next.panel === "list") {
-      mode = "list";
+      navigate({ type: "focus", mode: "list" });
       const task = visible.find((t) => t.Key === selected);
       if (task && renderer.width >= 80) {
-        inspectorMode = tabAfterTaskSelection(opened?.Key, task.Key, inspectorMode);
-        opened = structuredClone(task);
-        inspecting = true;
+        navigate({ type: "select", task });
       }
     }
     render();
@@ -1093,19 +1061,19 @@ renderer.keyInput.on("keypress", (key) => {
       chooseBrowse({ source, group: `status:${taskStatuses[cardIndex]}` });
       return;
     }
-    if (name === "escape") { cardsFocused = false; mode = "browse"; render(); return; }
+    if (name === "escape") { cardsFocused = false; navigate({ type: "focus", mode: "browse" }); render(); return; }
     if (!["a", "/", "?", "q", "d", "r"].includes(name)) return;
     if (["a", "/"].includes(name)) cardsFocused = false;
   }
   if (group === "home" && name === "up" && ((mode === "list" && visible.findIndex((t) => t.Key === selected) <= 0) || (["detail", "history"].includes(mode) && (scroll?.scrollTop || 0) === 0) || (mode === "links" && linkIndex === 0))) {
     cardsFocused = true;
+    navigate({ type: "focus", mode: "list" });
     render();
     return;
   }
   if (["detail", "links", "history"].includes(mode) && ["u", "i", "o"].includes(name) && opened) {
-    inspecting = true;
     if (name === "o") showHistory();
-    else { mode = name === "u" ? "detail" : "links"; linkIndex = 0; linkError = ""; render(); }
+    else { navigate({ type: "focus", mode: name === "u" ? "detail" : "links" }); linkIndex = 0; linkError = ""; render(); }
     return;
   }
   if (name === "q") {
@@ -1125,7 +1093,7 @@ renderer.keyInput.on("keypress", (key) => {
   }
   if (name === "/") {
     key.preventDefault();
-    mode = "list";
+    navigate({ type: "focus", mode: "list" });
     focus = "search";
     render();
     return;
@@ -1155,7 +1123,7 @@ renderer.keyInput.on("keypress", (key) => {
     ["detail", "links", "history"].includes(mode) &&
     name === "e"
   ) {
-    expanded = !expanded;
+    navigate({ type: "expand" });
     render();
     return;
   }
@@ -1237,12 +1205,9 @@ renderer.keyInput.on("keypress", (key) => {
       i = navigationTarget(taskListScroll, i, visible.length, name);
     else return;
     const previous = visible.findIndex((t) => t.Key === selected);
-    selected = visible[i]?.Key || "";
+    if (previous !== i) navigate({ type: "select", task: visible[i] || null });
     selectTask(taskListScroll, previous, i);
     if (previous !== i && visible[i] && renderer.width >= 80) {
-      opened = structuredClone(visible[i]);
-      inspecting = true;
-      inspectorMode = "detail";
       pending = null;
       changes = [];
       listScroll = taskListScroll?.scrollTop || 0;
@@ -1256,13 +1221,13 @@ renderer.keyInput.on("keypress", (key) => {
     if (name === "pageup") scroll.scrollBy(-10);
   }
 });
-renderer.on("resize", () => { if (renderer.width < 150) cardIndex = Math.min(cardIndex, 3); else expanded = false; render(); });
+renderer.on("resize", () => { if (renderer.width < 150) cardIndex = Math.min(cardIndex, 3); navigate({ type: "resize", width: renderer.width }); render(); });
 if (!cli.taskId) {
   const cached = await snapshots.readCached();
   if (cached) {
     data = cached;
     showingCachedSnapshot = true;
-    initializePreview();
+    listTasks();
   }
 }
 render();

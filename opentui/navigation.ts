@@ -129,16 +129,49 @@ export function tabAfterTaskSelection(previous: string | undefined, next: string
   return previous === next ? tab : "detail";
 }
 
-export function taskSelection(task: Task | null, previous: Task | null, tab: InspectorTab) {
-  return {
-    selected: task?.Key || "",
-    opened: task ? structuredClone(task) : null,
-    inspectorMode: task ? tabAfterTaskSelection(previous?.Key, task.Key, tab) : "detail" as InspectorTab,
-    inspecting: !!task,
-  };
-}
+export type NavigationState = {
+  selected: string; opened: Task | null; inspectorMode: InspectorTab;
+  inspecting: boolean; expanded: boolean; mode: string;
+};
+export type NavigationAction =
+  | { type: "sync"; tasks: Task[]; width: number; preview: boolean }
+  | { type: "select"; task: Task | null; mode?: "list" | "inspector" }
+  | { type: "focus"; mode: "browse" | "list" | InspectorTab }
+  | { type: "expand" }
+  | { type: "resize"; width: number }
+  | { type: "close" };
 
-export function selectionAfterRemoval(task: Task | null, previous: Task | null, tab: InspectorTab, mode: string) {
-  const selection = taskSelection(task, previous, tab);
-  return { ...selection, mode: ["detail", "links", "history"].includes(mode) ? (task ? selection.inspectorMode : "list") : mode };
+export function transitionNavigation(state: NavigationState, action: NavigationAction): NavigationState {
+  let next = { ...state };
+  const select = (task: Task | null, open: boolean) => {
+    const changed = state.selected !== (task?.Key || "");
+    next.selected = task?.Key || "";
+    if (changed || open || !task) {
+      next.opened = task && open ? structuredClone(task) : null;
+      next.inspecting = !!next.opened;
+      if (changed || !task) next.inspectorMode = "detail";
+      if (["detail", "links", "history"].includes(next.mode) && changed)
+        next.mode = task && open ? next.inspectorMode : "list";
+    }
+  };
+  if (action.type === "sync") {
+    const task = action.tasks.find((item) => item.Key === state.selected) || action.tasks[0] || null;
+    const open = !!task && (state.inspecting || (action.preview && action.width >= 80));
+    if (task?.Key !== state.selected || (!state.opened && open)) select(task, open);
+  } else if (action.type === "select") {
+    select(action.task, !!action.task);
+    if (action.mode === "list") next.mode = "list";
+    if (action.mode === "inspector" && action.task) next.mode = next.inspectorMode;
+  } else if (action.type === "focus") {
+    next.mode = action.mode;
+    if (["detail", "links", "history"].includes(action.mode)) next.inspectorMode = action.mode as InspectorTab;
+  } else if (action.type === "expand") next.expanded = !next.expanded;
+  else if (action.type === "resize" && action.width >= 150) next.expanded = false;
+  else if (action.type === "close") {
+    next.opened = null;
+    next.inspecting = false;
+    next.mode = "list";
+  }
+  if (!["detail", "links", "history"].includes(next.mode)) next.expanded = false;
+  return next;
 }

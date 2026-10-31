@@ -150,7 +150,8 @@ let actionTask: Task | null = null,
   actionResult: ActionResult | null = null,
   actionRunning = false,
   actedKey = "",
-  updatedAt: Date | null = null;
+  updatedAt: Date | null = null,
+  actionError = "";
 let helpPanel: HelpPanel = "browse";
 const text = (
   id: string,
@@ -283,6 +284,8 @@ function render(underlay = false) {
       ? helpDimensions(helpPanel, renderer.width, renderer.height)
       : overlayMode === "actions"
         ? modalSize(actionsWidth(), actionMenu.length + 6)
+        : overlayMode === "error"
+          ? modalSize(76, actionError.split("\n").reduce((sum, row) => sum + Math.max(1, Math.ceil(Bun.stringWidth(row) / 70)), 0) + 8)
         : overlayMode === "confirm"
           ? modalSize(76, Math.ceil(Bun.stringWidth(command) / 70) + Math.ceil(Bun.stringWidth(actionChoice?.warning || "") / 70) + 10)
           : modalSize(64, 9);
@@ -302,7 +305,7 @@ function render(underlay = false) {
       shouldFill: true,
     });
     renderer.root.add(p);
-    const modalTitle = line("modal-title", overlayMode === "help" ? "help" : overlayMode === "add" ? "add source" : overlayMode === "actions" ? `actions · ${actionTask?.Data.id}` : overlayMode === "confirm" ? actionChoice?.question || "" : `${actionChoice?.label} · ${actionTask?.Data.id}`, activeBorder);
+    const modalTitle = line("modal-title", overlayMode === "help" ? "help" : overlayMode === "add" ? "add source" : overlayMode === "actions" ? `actions · ${actionTask?.Data.id}` : overlayMode === "confirm" ? actionChoice?.question || "" : overlayMode === "error" ? `${actionChoice?.label} failed · ${actionTask?.Data.id}` : `${actionChoice?.label} · ${actionTask?.Data.id}`, activeBorder);
     modalTitle.attributes = 1;
     p.add(modalTitle);
     p.add(line("modal-title-gap", " ", RGBA.fromIndex(8)));
@@ -369,6 +372,18 @@ function render(underlay = false) {
       field.focus();
       p.add(box("action-input-spacer", { flexGrow: 1, minHeight: 1 }));
       p.add(keybindBar("action-input-hint", [actionChoice?.confirm ? "↵ review" : "↵ run", "esc cancel"], { paddingRight: 0 }));
+    } else if (overlayMode === "error") {
+      p.add(line("error-label", "tasks-axi reported:", "#d8d8de"));
+      p.findDescendantById("error-label")!.attributes = 1;
+      p.add(text("error-text", actionError, RGBA.fromIndex(9), { width: "100%", wrapMode: "char" }));
+      p.add(box("error-spacer", { flexGrow: 1, minHeight: 1 }));
+      const keys = box("error-hint", { flexDirection: "row", justifyContent: "flex-end", width: "100%", height: 1, flexShrink: 0 });
+      keys.add(line("error-keys", new StyledText([
+        ...(actionChoice?.input ? [fg(activeBorder)("[e]"), fg("#d8d8de")(" edit   ")] : []),
+        fg(activeBorder)("[r]"), fg("#d8d8de")(" retry   "),
+        fg(activeBorder)("[n]"), fg("#d8d8de")(" close"),
+      ]) as any, RGBA.defaultForeground()));
+      p.add(keys);
     } else if (overlayMode === "confirm") {
       p.add(text("confirm-warning", actionChoice?.warning || "", RGBA.fromIndex(9), { width: "100%" }));
       p.add(text("confirm-backlog", new StyledText([fg("#d8d8de")("backlog: "), fg("#86aaf5")(actionTask ? sourceName(actionTask.Source) : "")]), RGBA.defaultForeground(), { width: "100%" }));
@@ -443,7 +458,7 @@ function render(underlay = false) {
       input.focus();
     }
     const panel: HelpPanel = navigation.cardsFocused ? "cards" : viewingMode as HelpPanel;
-    if (updatedAt) footer.add(text("updated-at", `updated ${updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}  `, "#858796", { height: 1, flexShrink: 0 }));
+    if (updatedAt) footer.add(text("updated-at", `updated ${updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}  `, RGBA.defaultForeground(), { height: 1, flexShrink: 0 }));
     footer.add(keybindBar("footer", footerHints(panel, renderer.width, focus === "search"), { width: "auto", flexShrink: 0 }));
   };
   const area = box("area", { flexDirection: "row", flexGrow: 1 });
@@ -1051,8 +1066,14 @@ async function runAction() {
   navigate({ type: "dismiss" });
   actionRunning = true;
   render();
-  actionResult = await runTasksAxi(commandArgs(action, task, actionValue));
+  const result = await runTasksAxi(commandArgs(action, task, actionValue));
   actionRunning = false;
+  // Errors open a dialog that keeps tasks-axi's guidance and offers edit or retry.
+  actionResult = result.ok ? result : null;
+  if (!result.ok) {
+    actionError = result.message;
+    navigate({ type: "modal", modal: "error" });
+  }
   if (renderer.isDestroyed) return;
   // Read after the write even if a refresh started before it.
   await refreshing;
@@ -1169,6 +1190,19 @@ renderer.keyInput.on("keypress", (key) => {
     }
     return;
   }
+  if (navigation.mode === "error") {
+    if (key.name === "r") runAction();
+    else if (key.name === "e" && actionChoice?.input) {
+      key.preventDefault();
+      navigate({ type: "dismiss" });
+      navigate({ type: "modal", modal: "input" });
+      render();
+    } else if (key.name === "n" || key.name === "q" || key.name === "escape") {
+      navigate({ type: "dismiss" });
+      render();
+    }
+    return;
+  }
   if (navigation.mode === "confirm") {
     if (key.name === "y") runAction();
     else if (key.name === "n" || key.name === "q" || key.name === "escape") {
@@ -1233,7 +1267,8 @@ renderer.keyInput.on("keypress", (key) => {
   }
   if (name === "escape") return;
   if (name === "return" && (isInspectorTab(navigation.mode) || navigation.mode === "list")) {
-    const task = isInspectorTab(navigation.mode) ? navigation.opened : navigation.mode === "list" ? visible.find((t) => t.Key === navigation.selected) : null;
+    // A task moved out of the list by its own action stays selected in the inspector.
+    const task = isInspectorTab(navigation.mode) || navigation.opened?.Key === navigation.selected ? navigation.opened : visible.find((t) => t.Key === navigation.selected);
     if (task && !actionRunning) openActions(task);
     return;
   }

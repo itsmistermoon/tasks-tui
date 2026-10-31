@@ -149,7 +149,8 @@ let actionTask: Task | null = null,
   actionValue = "",
   actionResult: ActionResult | null = null,
   actionRunning = false,
-  actedKey = "";
+  actedKey = "",
+  updatedAt: Date | null = null;
 let helpPanel: HelpPanel = "browse";
 const text = (
   id: string,
@@ -442,6 +443,7 @@ function render(underlay = false) {
       input.focus();
     }
     const panel: HelpPanel = navigation.cardsFocused ? "cards" : viewingMode as HelpPanel;
+    if (updatedAt) footer.add(text("updated-at", `updated ${updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}  `, "#858796", { height: 1, flexShrink: 0 }));
     footer.add(keybindBar("footer", footerHints(panel, renderer.width, focus === "search"), { width: "auto", flexShrink: 0 }));
   };
   const area = box("area", { flexDirection: "row", flexGrow: 1 });
@@ -977,6 +979,8 @@ async function readSnapshot() {
       }
     }
     const changed = JSON.stringify(data) !== JSON.stringify(next);
+    // Mark when the view last took in a change, including the result of an action.
+    if (changed || actedKey) updatedAt = new Date();
     // Keep a task selected after its own action moves it out of the current view.
     const detachedKey = actedKey === navigation.selected || (navigation.opened && !visible.some((task) => task.Key === navigation.selected)) ? navigation.selected : "";
     const detached = detachedKey ? next.tasks.find((task) => task.Key === detachedKey) : undefined;
@@ -998,7 +1002,7 @@ async function readSnapshot() {
       }
     }
     if (changed || taskLookupChanged || hadCachedSnapshot) listTasks(detached);
-    if ((changed || taskLookupChanged || hadCachedSnapshot) && focus !== "search" && !isModal(navigation.mode))
+    if ((changed || taskLookupChanged || hadCachedSnapshot || actedKey) && focus !== "search" && !isModal(navigation.mode))
       render();
   } catch (e) {
     if (renderer.isDestroyed) return;

@@ -7,6 +7,8 @@ export type TaskAction = {
   confirm: boolean;
   // Shown before an irreversible or bulk action runs.
   question?: string;
+  // Confirmation button label.
+  verb?: string;
   warning?: string;
   input?: { label: string; initial: string };
   args: (value: string) => string[];
@@ -39,11 +41,11 @@ export function taskActions(task: Task): TaskAction[] {
     if (current.length) actions.push({ key: "u", label: "unblock", confirm: false, input: { label: "blocking task id to remove:", initial: current[0] }, args: (other) => ["unblock", id, "--by", other] });
   }
   actions.push(
-    { key: "t", label: "edit title", confirm: true, question: `replace the title of ${id}?`, warning: "The current title is replaced and is not kept.", input: { label: "new title:", initial: String(task.Data.title ?? "") }, args: (title) => ["update", id, "--title", title] },
-    { key: "n", label: "replace notes", confirm: true, question: `replace the notes of ${id}?`, warning: "The current notes are replaced; the previous version is kept only in the note archive.", input: { label: "new notes (previous notes are archived):", initial: blank(task.Data.body) ? "" : String(task.Data.body) }, args: (body) => ["update", id, "--body", body, "--archive-body"] },
-    { key: "m", label: "move to backlog", confirm: true, question: `move ${id} to another backlog?`, warning: "The task leaves this backlog and is written to the destination backlog.", input: { label: "destination backlog file or directory:", initial: "" }, args: (path) => ["mv", id, "--to", path] },
-    { key: "P", label: "prune: archive done tasks", confirm: true, question: "archive older done tasks in this backlog?", warning: "Moves every done task in this backlog, except the most recent ones you keep, to done-archive.md. It affects all done tasks, not just this one.", input: { label: "done tasks to keep:", initial: "10" }, args: (keep) => ["prune", "--keep", keep, "--state", "done"] },
-    { key: "D", label: "delete task", confirm: true, question: `delete task ${id}?`, warning: "The task is permanently removed from the backlog. This cannot be undone.", args: () => ["rm", id] },
+    { key: "t", label: "edit title", confirm: true, verb: "rename", question: `replace the title of ${id}?`, warning: "The current title is replaced and is not kept.", input: { label: "new title:", initial: String(task.Data.title ?? "") }, args: (title) => ["update", id, "--title", title] },
+    { key: "n", label: "replace notes", confirm: true, verb: "replace", question: `replace the notes of ${id}?`, warning: "The current notes are replaced; the previous version is kept only in the note archive.", input: { label: "new notes (previous notes are archived):", initial: blank(task.Data.body) ? "" : String(task.Data.body) }, args: (body) => ["update", id, "--body", body, "--archive-body"] },
+    { key: "m", label: "move to backlog", confirm: true, verb: "move", question: `move ${id} to another backlog?`, warning: "The task leaves this backlog and is written to the destination backlog.", input: { label: "destination backlog file or directory:", initial: "" }, args: (path) => ["mv", id, "--to", path] },
+    { key: "P", label: "prune: archive done tasks", confirm: true, verb: "archive", question: "archive older done tasks in this backlog?", warning: "Moves every done task in this backlog, except the most recent ones you keep, to done-archive.md. It affects all done tasks, not just this one.", input: { label: "done tasks to keep:", initial: "10" }, args: (keep) => ["prune", "--keep", keep, "--state", "done"] },
+    { key: "D", label: "delete task", confirm: true, verb: "remove", question: `delete task ${id}?`, warning: "The task is permanently removed from the backlog. This cannot be undone.", args: () => ["rm", id] },
   );
   return actions;
 }

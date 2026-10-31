@@ -373,7 +373,7 @@ function render(underlay = false) {
       p.add(box("action-input-spacer", { flexGrow: 1, minHeight: 1 }));
       p.add(keybindBar("action-input-hint", [actionChoice?.confirm ? "↵ review" : "↵ run", "esc cancel"], { paddingRight: 0 }));
     } else if (overlayMode === "error") {
-      p.add(line("error-label", "tasks-axi reported:", "#d8d8de"));
+      p.add(line("error-label", "Nothing was changed. tasks-axi explains why:", "#d8d8de"));
       p.findDescendantById("error-label")!.attributes = 1;
       p.add(text("error-text", actionError, RGBA.fromIndex(9), { width: "100%", wrapMode: "char" }));
       p.add(box("error-spacer", { flexGrow: 1, minHeight: 1 }));
@@ -393,7 +393,7 @@ function render(underlay = false) {
       p.add(text("confirm-command", command, RGBA.fromIndex(14), { width: "100%", wrapMode: "char" }));
       p.add(box("confirm-spacer", { flexGrow: 1, minHeight: 1 }));
       const decision = box("confirm-hint", { flexDirection: "row", justifyContent: "flex-end", width: "100%", height: 1, flexShrink: 0 });
-      decision.add(line("confirm-keys", new StyledText([fg(activeBorder)("[y]"), fg("#d8d8de")(` ${actionChoice?.args("")[0]}   `), fg(activeBorder)("[n]"), fg("#d8d8de")(" cancel")]) as any, RGBA.defaultForeground()));
+      decision.add(line("confirm-keys", new StyledText([fg(activeBorder)("[y]"), fg("#d8d8de")(` ${actionChoice?.verb}   `), fg(activeBorder)("[n]"), fg("#d8d8de")(" cancel")]) as any, RGBA.defaultForeground()));
       p.add(decision);
     } else {
       p.add(text("help-text", helpContent(helpPanel, renderer.width), "#d8d8de", { width: "100%", flexGrow: 1 }));

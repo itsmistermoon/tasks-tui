@@ -23,7 +23,7 @@ test("offers actions that match the task state", () => {
 test("only irreversible or bulk actions require confirmation", () => {
   const confirmed = taskActions(task({ id: "a" })).filter((action) => action.confirm).map((action) => action.args("x")[0]);
   expect(confirmed).toEqual(["update", "update", "mv", "prune", "rm"]);
-  expect(taskActions(task({ id: "a" })).every((action) => !action.confirm || (!!action.warning && !!action.question))).toBe(true);
+  expect(taskActions(task({ id: "a" })).every((action) => !action.confirm || (!!action.warning && !!action.question && !!action.verb))).toBe(true);
 });
 
 test("builds the tasks-axi command for the task's backlog", () => {

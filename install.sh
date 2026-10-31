@@ -52,6 +52,7 @@ tar -xzf "$tmp/tasks-tui.tar.gz" -C "$tmp/package"
 test -x "$tmp/package/bin/tasks-backend" && test -f "$tmp/package/opentui/app.ts" || fail 'Invalid release archive.'
 touch "$tmp/package/.tasks-tui-managed"
 if [ -d "$install_dir/axi" ]; then
+  rm -rf "$tmp/package/axi"
   cp -R "$install_dir/axi" "$tmp/package/axi"
 fi
 axi=$(command -v tasks-axi || true)

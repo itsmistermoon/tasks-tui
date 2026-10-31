@@ -37,7 +37,7 @@ func TestInstallerPreservesTasksAxi(t *testing.T) {
 			}
 			gz := gzip.NewWriter(f)
 			tw := tar.NewWriter(gz)
-			for name, data := range map[string]string{"bin/tasks-backend": "backend", "bin/tasks-tui": "launcher", "opentui/app.ts": "app"} {
+			for name, data := range map[string]string{"bin/tasks-backend": "backend", "bin/tasks-tui": "launcher", "opentui/app.ts": "app", "axi/node_modules/tasks-axi/bundled": "bundled"} {
 				if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0755, Size: int64(len(data))}); err != nil {
 					t.Fatal(err)
 				}

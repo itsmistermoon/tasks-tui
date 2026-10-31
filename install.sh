@@ -8,11 +8,6 @@ case "$(uname -m)" in arm64|aarch64) arch=arm64 ;; x86_64|amd64) arch=x64 ;; *) 
 bindir=${TASKS_TUI_BIN_DIR:-"$HOME/.local/bin"}
 case "$bindir" in /*) ;; *) fail 'TASKS_TUI_BIN_DIR must be an absolute path.' ;; esac
 bun_dir=${BUN_INSTALL:-"$HOME/.bun"}/bin
-PATH="$bindir:$bun_dir:$PATH"
-export PATH
-bindir=${TASKS_TUI_BIN_DIR:-"$HOME/.local/bin"}
-case "$bindir" in /*) ;; *) fail 'TASKS_TUI_BIN_DIR must be an absolute path.' ;; esac
-bun_dir=${BUN_INSTALL:-"$HOME/.bun"}/bin
 export PATH="$bun_dir:$bindir:$PATH"
 if ! command -v bun >/dev/null 2>&1 || ! bun -e 'const v = Bun.version.split(".").map(Number); process.exit(v[0] > 1 || (v[0] === 1 && (v[1] > 3 || (v[1] === 3 && v[2] >= 14))) ? 0 : 1)'; then
   printf '%s\n' 'Installing Bun using its official installer...'
@@ -64,19 +59,29 @@ if [ -z "$axi" ]; then
   ln -s "$install_dir/axi/node_modules/tasks-axi/dist/bin/tasks-axi-bun" "$bindir/tasks-axi"
 fi
 case "${SHELL:-/bin/sh}" in
-  */fish) profile="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"; style=fish ;;
-  */zsh) profile="$HOME/.zprofile"; style=sh ;;
-  */bash) profile="$HOME/.bash_profile"; style=sh ;;
-  *) profile="$HOME/.profile"; style=sh ;;
+  */fish) profiles="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"; style=fish ;;
+  */zsh) profiles="$HOME/.zprofile"; style=sh ;;
+  */bash) profiles=bash; style=sh ;;
+  *) profiles="$HOME/.profile"; style=sh ;;
 esac
-mkdir -p "$(dirname "$profile")"
-touch "$profile"
-for dir in "$bun_dir" "$bindir"; do
-  quoted=$(printf '%s' "$dir" | sed "s/'/'\\\\''/g")
-  if [ "$style" = fish ]; then line="fish_add_path '$quoted'"; else line="export PATH='$quoted':\"\$PATH\""; fi
+quoted_bun=$(printf '%s' "$bun_dir" | sed "s/'/'\\\\''/g")
+quoted_bin=$(printf '%s' "$bindir" | sed "s/'/'\\\\''/g")
+if [ "$style" = fish ]; then
+  line="fish_add_path --move '$quoted_bun' '$quoted_bin'"
+else
+  line="export PATH='$quoted_bun':'$quoted_bin':\"\$PATH\""
+fi
+if [ "$profiles" = bash ]; then
+  set -- "$HOME/.bash_profile" "$HOME/.bashrc"
+else
+  set -- "$profiles"
+fi
+for profile do
+  mkdir -p "$(dirname "$profile")"
+  touch "$profile"
   if ! grep -Fqx "$line" "$profile"; then
     printf '\n%s\n' "$line" >> "$profile"
-    printf 'Added %s to PATH in %s.\n' "$dir" "$profile"
+    printf 'Added %s and %s to PATH in %s.\n' "$bun_dir" "$bindir" "$profile"
   fi
 done
 printf 'Installed tasks-tui. Open a new shell to run tasks-tui.\n'

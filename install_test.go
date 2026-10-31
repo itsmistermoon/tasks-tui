@@ -3,6 +3,7 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -84,9 +85,36 @@ func TestInstallerPreservesTasksAxi(t *testing.T) {
 				t.Fatal(err)
 			}
 			cmd := exec.Command("sh", "install.sh")
-			cmd.Env = append(os.Environ(), "HOME="+home, "SHELL=/bin/sh", "BUN_INSTALL="+filepath.Join(home, ".bun"), "TASKS_TUI_BIN_DIR="+bindir, "FIXTURE_ARCHIVE="+archive, "PATH="+mocks+":"+os.Getenv("PATH"))
+			shell := "/bin/sh"
+			if location == "destination" {
+				shell = "/bin/bash"
+				if err := os.WriteFile(filepath.Join(bindir, "bun"), []byte("#!/bin/sh\nexit 1\n"), 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cmd.Env = append(os.Environ(), "HOME="+home, "SHELL="+shell, "BUN_INSTALL="+filepath.Join(home, ".bun"), "TASKS_TUI_BIN_DIR="+bindir, "FIXTURE_ARCHIVE="+archive, "PATH="+mocks+":"+os.Getenv("PATH"))
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("installer failed: %v\n%s", err, out)
+			}
+			if location == "destination" {
+				again := exec.Command("sh", "install.sh")
+				again.Env = cmd.Env
+				if out, err := again.CombinedOutput(); err != nil {
+					t.Fatalf("reinstall failed: %v\n%s", err, out)
+				}
+				for _, profile := range []string{".bash_profile", ".bashrc"} {
+					args := []string{"--noprofile", "--norc", "-c", fmt.Sprintf(". %q; command -v bun; command -v tasks-tui; printf '%%s\\n' \"$PATH\"", filepath.Join(home, profile))}
+					if profile == ".bashrc" {
+						args = []string{"--noprofile", "--rcfile", filepath.Join(home, profile), "-ic", "command -v bun; command -v tasks-tui; printf '%s\\n' \"$PATH\""}
+					}
+					session := exec.Command("bash", args...)
+					session.Env = append(os.Environ(), "HOME="+home, "PATH=/usr/bin:/bin")
+					out, err := session.Output()
+					expected := filepath.Join(home, ".bun", "bin") + ":" + bindir + ":/usr/bin:/bin"
+					if err != nil || strings.TrimSpace(string(out)) != filepath.Join(home, ".bun", "bin", "bun")+"\n"+filepath.Join(bindir, "tasks-tui")+"\n"+expected {
+						t.Fatalf("%s session PATH incorrect: %s, %v", profile, out, err)
+					}
+				}
 			}
 			got, err := os.Readlink(link)
 			if err != nil || got != executable {

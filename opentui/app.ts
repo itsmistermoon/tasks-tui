@@ -28,7 +28,7 @@ import { openLink } from "./links";
 import { matchesDependency } from "./dependencies";
 import { truncateText } from "./truncate";
 import { SnapshotClient, snapshotCachePath } from "./snapshot-client";
-import { helpContent, helpDimensions, type HelpPanel } from "./help";
+import { footerHints, helpContent, helpDimensions, type HelpPanel } from "./help";
 import { parseArgs, resolveTask } from "./cli";
 import { taskListCountLabel } from "./task-list-count";
 import {
@@ -199,6 +199,7 @@ function chooseBrowse(v: { source: string; group: string }) {
   render();
 }
 function openTask(t: Task) {
+  const previousMode = mode;
   const nextInspectorMode = tabAfterTaskSelection(opened?.Key, t.Key, inspectorMode);
   if (renderer.width >= 150) inspecting = true;
   if (mode === "list") listScroll = taskListScroll?.scrollTop || 0;
@@ -219,7 +220,8 @@ function openTask(t: Task) {
   inspectorMode = nextInspectorMode;
   mode = nextInspectorMode;
   focus = "list";
-  renderActiveView();
+  if (previousMode !== mode) render();
+  else renderActiveView();
 }
 function backFromTask() {
   if (inspecting && expanded) {
@@ -408,7 +410,8 @@ function render() {
       location.add(input);
       input.focus();
     }
-    footer.add(keybindBar("footer", renderer.width < 105 ? ["? help", "q quit"] : ["/ filter", "d show done", "a add source", "r refresh", "? help", "q quit"], { width: "auto", flexShrink: 0 }));
+    const panel: HelpPanel = cardsFocused ? "cards" : mode as HelpPanel;
+    footer.add(keybindBar("footer", footerHints(panel, renderer.width, focus === "search"), { width: "auto", flexShrink: 0 }));
   };
   const area = box("area", { flexDirection: "row", flexGrow: 1 });
   frame.add(area);

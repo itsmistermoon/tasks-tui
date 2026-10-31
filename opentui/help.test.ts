@@ -35,3 +35,15 @@ test("help fits its measured panel and displays the close hint", async () => {
     expect(hintLine!.indexOf("press any key to close")).toBe(size.width - 2 - "press any key to close".length);
   } finally { await setup.dispose(); }
 });
+
+test("footer hints match the focused panel and filter mode", async () => {
+  const { footerHints } = await import("./help");
+  expect(footerHints("browse", 160, false)).toContain("j/k choose");
+  expect(footerHints("cards", 160, false)).toContain("enter open");
+  expect(footerHints("list", 160, false)).toContain("enter inspect");
+  expect(footerHints("links", 160, false)).toContain("enter open");
+  expect(footerHints("detail", 160, false)).toContain("u/i/o tabs");
+  expect(footerHints("browse", 160, false)).not.toContain("u/i/o tabs");
+  expect(footerHints("list", 160, true)).toEqual(["enter apply", "esc clear"]);
+  expect(footerHints("list", 80, false)).toEqual(["? help", "q quit"]);
+});

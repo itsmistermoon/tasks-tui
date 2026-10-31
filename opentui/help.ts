@@ -54,3 +54,18 @@ export function helpDimensions(panel: HelpPanel, terminalWidth: number, terminal
   const height = Math.max(3, Math.min(terminalHeight - 2, contentHeight + 4));
   return { width, height };
 }
+
+export function footerHints(panel: HelpPanel, width: number, filtering: boolean): string[] {
+  if (width < 105) return ["? help", "q quit"];
+  if (filtering) return ["enter apply", "esc clear"];
+  if (width < 150) return ["/ filter", "d show done", "a add source", "r refresh", "? help", "q quit"];
+  const panelHints: Record<HelpPanel, string[]> = {
+    browse: ["j/k choose", "enter open", "h/l move"],
+    cards: ["h/l choose", "j list", "enter open"],
+    list: ["j/k choose", "enter inspect", "h/l move"],
+    detail: ["j/k scroll", "u/i/o tabs", "h back"],
+    links: ["j/k choose", "enter open", "u/i/o tabs", "h back"],
+    history: ["j/k scroll", "u/i/o tabs", "h back"],
+  };
+  return [...panelHints[panel], "/ filter", "? help", "q quit"];
+}

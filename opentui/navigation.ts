@@ -138,7 +138,7 @@ export type NavigationState = {
 };
 export type NavigationAction =
   | { type: "sync"; tasks: Task[]; width: number; preview: boolean; preserve?: Task }
-  | { type: "select"; task: Task | null; mode?: "list" | "inspector" }
+  | { type: "select"; task: Task | null; mode?: "list" | "inspector"; reload?: boolean }
   | { type: "focus"; mode: "browse" | "list" | InspectorTab }
   | { type: "expand" }
   | { type: "resize"; width: number }
@@ -149,10 +149,10 @@ export type NavigationAction =
 
 export function transitionNavigation(state: NavigationState, action: NavigationAction): NavigationState {
   let next = { ...state };
-  const select = (task: Task | null, open: boolean) => {
+  const select = (task: Task | null, open: boolean, reload = false) => {
     const changed = state.selected !== (task?.Key || "");
     next.selected = task?.Key || "";
-    if (changed || open || !task) {
+    if (changed || (open && (!state.opened || reload)) || !task) {
       next.opened = task && open ? structuredClone(task) : null;
       next.inspecting = !!next.opened;
       if (changed || !task) next.inspectorMode = "detail";
@@ -170,7 +170,7 @@ export function transitionNavigation(state: NavigationState, action: NavigationA
     const open = !!task && (state.inspecting || (action.preview && action.width >= 80));
     if (task?.Key !== state.selected || (!state.opened && open)) select(task, open);
   } else if (action.type === "select") {
-    select(action.task, !!action.task);
+    select(action.task, !!action.task, action.reload);
     if (action.mode === "list") next.mode = "list";
     if (action.mode === "inspector" && action.task) next.mode = next.inspectorMode;
   } else if (action.type === "focus") {

@@ -99,6 +99,24 @@ test("a linked task outside the view survives subsequent data synchronization", 
   expect(same.inspectorMode).toBe("links");
 });
 
+test("changing focus or choosing the same task preserves its snapshot until reload", async () => {
+  const { transitionNavigation } = await import("./navigation");
+  const updated = { ...first, Data: { title: "updated" } };
+  const focused = transitionNavigation({ ...state, mode: "history" }, { type: "focus", mode: "list" });
+  const list = transitionNavigation(focused, { type: "select", task: updated });
+  const inspector = transitionNavigation(list, { type: "select", task: updated, mode: "inspector" });
+  const view = transitionNavigation(inspector, { type: "select", task: updated, mode: "list" });
+  expect(view.opened).toBe(first);
+  expect(view.opened?.Data.title).toBe("one");
+  expect(view.inspectorMode).toBe("history");
+  const reloaded = transitionNavigation(view, { type: "select", task: updated, mode: "inspector", reload: true });
+  expect(reloaded.opened?.Data.title).toBe("updated");
+  expect(reloaded.inspectorMode).toBe("history");
+  const other = transitionNavigation(reloaded, { type: "select", task: second });
+  expect(other.opened?.Key).toBe("two");
+  expect(other.inspectorMode).toBe("detail");
+});
+
 test("reduced cards preserve Done and Archived navigation", () => {
   for (const cardIndex of [4, 5]) {
     const focused = { ...initial, panel: "cards" as const, width: 90, cardIndex };

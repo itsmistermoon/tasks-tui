@@ -157,8 +157,9 @@ const box = (id: string, opts: any = {}) =>
   new BoxRenderable(renderer, { id, flexDirection: "column", ...opts });
 function navigate(action: NavigationAction) {
   const previous = navigation.selected;
+  const previousOpened = navigation.opened;
   navigation = transitionNavigation(navigation, action);
-  if (previous !== navigation.selected) { pending = null; changes = []; }
+  if (previous !== navigation.selected || previousOpened !== navigation.opened) { pending = null; changes = []; }
 }
 function listTasks(preserve?: Task) {
   const projection = projectView(data.tasks, data.sources, { query, source, group, showDone });
@@ -174,12 +175,10 @@ function chooseBrowse(v: { source: string; group: string }) {
   group = v.group;
   listTasks();
   navigate({ type: "select", task: visible[0] || null, mode: "list" });
-  pending = null;
-  changes = [];
   listScroll = 0;
   render();
 }
-function openTask(t: Task) {
+function openTask(t: Task, reload = false) {
   const previousMode = navigation.mode;
   if (navigation.mode === "list") listScroll = taskListScroll?.scrollTop || 0;
   else if (navigation.mode === "detail" && scroll) scroll.scrollTop = 0;
@@ -192,9 +191,7 @@ function openTask(t: Task) {
       updateSticky();
     }
   }
-  navigate({ type: "select", task: t, mode: "inspector" });
-  pending = null;
-  changes = [];
+  navigate({ type: "select", task: t, mode: "inspector", reload });
   focus = "list";
   if (previousMode !== navigation.mode) render();
   else renderActiveView();
@@ -898,9 +895,7 @@ async function refresh() {
     if (navigation.opened) {
       const t = next.tasks.find((x) => x.Key === navigation.opened!.Key);
       if (showingCachedSnapshot && t) {
-        navigate({ type: "select", task: t });
-        changes = [];
-        pending = null;
+        navigate({ type: "select", task: t, reload: true });
       } else if (showingCachedSnapshot && !t) {
         navigate({ type: "select", task: null });
       } else if (t) {
@@ -1107,7 +1102,7 @@ renderer.keyInput.on("keypress", (key) => {
     return;
   }
   if (name === "r") {
-    if (pending) openTask(pending);
+    if (pending) openTask(pending, true);
     else refresh();
     return;
   }

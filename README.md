@@ -42,6 +42,8 @@ You can also pass one or more backlog files or project directories. Use `--task 
 
 Press `?` for help, `/` to search.
 
+The viewer starts in Home, showing up to five recently completed and five recently archived tasks. On a wide terminal, Browse, Backlog, and Inspector are visible together; select a status card or a Browse entry to open another view.
+
 ## Task counts
 
 `--count` reads the same discovered or explicitly supplied backlogs as the viewer and prints one line with the default visible total (in progress, queued, blocked, and held) and counts for all six statuses: in progress, queued, blocked, held, done, and archived. Add `--json` for machine-readable counts, including `total_all` (including done and archived), the per-backlog breakdown, and an `errors` list:
@@ -79,7 +81,7 @@ Select a task and press `Enter` or move right to open the inspector. On a wide t
 | `d` | Show or hide completed and archived tasks |
 | `a` | Add a backlog file or directory |
 | `r` | Refresh sources or reload changed task details |
-| `Esc` | Close a dialog or clear the filter |
+| `Esc` | Close a dialog, clear the filter, or return from status cards |
 | `?` | Open help |
 | `q` / `Ctrl+C` | Quit |
 
@@ -89,9 +91,9 @@ The interface adapts to the terminal width: the sidebar and inspector use separa
 
 The viewer discovers backlogs in the current project and within `~/.treehouse`, `~/.fm`, and `~/projects`, with a bounded search depth. Pass paths on the command line or press `a` to add another source. A directory can contain a `backlog.md`, a `data/backlog.md`, or a `.tasks.toml` pointing to its backlog.
 
-The sidebar filters by source, status, task type, or repository. Filtering scans task data within the selected view. Completed and archived tasks are hidden by default; press `d` to include them or choose their status in Browse.
+The sidebar filters by source, status, task type, or repository. Filtering scans task data within the selected view. Outside Home, completed and archived tasks are hidden by default; press `d` to include them or choose their status in Browse.
 
-The view checks for changes every two seconds. An open task keeps its current contents while indicating changed fields; press `r` to reload it. If a known source becomes inaccessible, its last snapshot stays visible and the interface reports `STALE`.
+The viewer can show a cached snapshot at startup while it refreshes sources in the background. The view checks for changes every two seconds. An open task keeps its current contents while indicating changed fields; press `r` to reload it. If a known source becomes inaccessible, its last snapshot stays visible and the interface reports `STALE`.
 
 Pruned tasks can be read from `done-archive.md` or the archive configured in `.tasks.toml`. Archived tasks appear in their own group. Older archive entries may not record their original state. Previous note versions are read from `note-archive.md` when available.
 

@@ -84,6 +84,18 @@ func TestInstallerPreservesTasksAxi(t *testing.T) {
 			if err := os.Symlink(executable, link); err != nil {
 				t.Fatal(err)
 			}
+			if location == "previous-install" {
+				oldBin := filepath.Join(home, ".local", "share", "tasks-tui", "bin")
+				if err := os.MkdirAll(oldBin, 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(oldBin, "tasks-tui"), []byte("#!/bin/sh\nprintf 'old-viewer\\n'\n"), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(filepath.Join(oldBin, "tasks-tui"), filepath.Join(bindir, "tasks-tui")); err != nil {
+					t.Fatal(err)
+				}
+			}
 			cmd := exec.Command("sh", "install.sh")
 			shell := "/bin/sh"
 			if location == "destination" || location == "bash-login" || location == "bash-profile" {
@@ -108,6 +120,26 @@ func TestInstallerPreservesTasksAxi(t *testing.T) {
 				}
 			}
 			cmd.Env = append(os.Environ(), "HOME="+home, "SHELL="+shell, "BUN_INSTALL="+filepath.Join(home, ".bun"), "TASKS_TUI_BIN_DIR="+bindir, "FIXTURE_ARCHIVE="+archive, "ZDOTDIR="+home, "PATH="+mocks+":"+os.Getenv("PATH"))
+			if location == "previous-install" {
+				mv := "#!/bin/sh\ncase \"$1\" in */package) exit 1 ;; esac\nexec /bin/mv \"$@\"\n"
+				if err := os.WriteFile(filepath.Join(mocks, "mv"), []byte(mv), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if out, err := cmd.CombinedOutput(); err == nil {
+					t.Fatalf("expected failed replacement: %s", out)
+				}
+				for _, check := range []struct{ path, want string }{{link, "existing-version"}, {filepath.Join(bindir, "tasks-tui"), "old-viewer"}} {
+					out, err := exec.Command(check.path).CombinedOutput()
+					if err != nil || strings.TrimSpace(string(out)) != check.want {
+						t.Fatalf("previous command lost: %s, %v", out, err)
+					}
+				}
+				if err := os.Remove(filepath.Join(mocks, "mv")); err != nil {
+					t.Fatal(err)
+				}
+				cmd = exec.Command("sh", "install.sh")
+				cmd.Env = append(os.Environ(), "HOME="+home, "SHELL="+shell, "BUN_INSTALL="+filepath.Join(home, ".bun"), "TASKS_TUI_BIN_DIR="+bindir, "FIXTURE_ARCHIVE="+archive, "ZDOTDIR="+home, "PATH="+mocks+":"+os.Getenv("PATH"))
+			}
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("installer failed: %v\n%s", err, out)
 			}

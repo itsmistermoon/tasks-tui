@@ -22,7 +22,18 @@ fi
 bun -e 'const v = Bun.version.split(".").map(Number); process.exit(v[0] > 1 || (v[0] === 1 && (v[1] > 3 || (v[1] === 3 && v[2] >= 14))) ? 0 : 1)' || fail 'Bun 1.3.14 or newer could not be installed.'
 mkdir -p "$bindir" "$HOME/.local/share"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/tasks-tui.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+backup=
+committed=0
+cleanup() {
+  if [ "$committed" -eq 0 ] && [ -n "$backup" ] && [ -d "$backup/previous" ]; then
+    rm -rf "$install_dir"
+    mv "$backup/previous" "$install_dir" || printf 'Could not restore the previous installation from %s.\n' "$backup/previous" >&2
+  fi
+  if [ -n "$backup" ]; then rmdir "$backup" 2>/dev/null || :; fi
+  rm -rf "$tmp"
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 url="https://github.com/itsmistermoon/tasks-tui/releases/latest/download/tasks-tui-$os-$arch.tar.gz"
 curl -fL "$url" -o "$tmp/tasks-tui.tar.gz" || fail "Could not download $url."
 mkdir "$tmp/package"
@@ -37,7 +48,7 @@ if [ -n "$axi" ]; then
   if [ -d "$install_dir/axi" ]; then
     axi_owned=$(CDPATH= cd -- "$install_dir/axi" && pwd -P)
     case "$axi_real" in
-      "$axi_owned"/*) mv "$install_dir/axi" "$tmp/package/axi" ;;
+      "$axi_owned"/*) cp -R "$install_dir/axi" "$tmp/package/axi" ;;
     esac
   fi
 else
@@ -52,12 +63,17 @@ else
   printf '#!/bin/sh\nentry=$0\nif [ -L "$entry" ]; then entry=$(readlink "$entry"); fi\nexec bun "$(dirname "$entry")/tasks-axi.js" "$@"\n' > "$axi_dist/bin/tasks-axi-bun"
   chmod +x "$axi_dist/bin/tasks-axi-bun"
 fi
-rm -rf "$install_dir"
+if [ -e "$install_dir" ]; then
+  backup=$(mktemp -d "$HOME/.local/share/tasks-tui-backup.XXXXXX")
+  mv "$install_dir" "$backup/previous"
+fi
 mv "$tmp/package" "$install_dir"
 ln -sf "$install_dir/bin/tasks-tui" "$bindir/tasks-tui"
 if [ -z "$axi" ]; then
   ln -s "$install_dir/axi/node_modules/tasks-axi/dist/bin/tasks-axi-bun" "$bindir/tasks-axi"
 fi
+committed=1
+if [ -n "$backup" ]; then rm -rf "$backup"; fi
 case "${SHELL:-/bin/sh}" in
   */fish) profiles="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"; style=fish ;;
   */zsh) profiles=zsh; style=sh ;;

@@ -60,7 +60,7 @@ if [ -z "$axi" ]; then
 fi
 case "${SHELL:-/bin/sh}" in
   */fish) profiles="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"; style=fish ;;
-  */zsh) profiles="$HOME/.zprofile"; style=sh ;;
+  */zsh) profiles=zsh; style=sh ;;
   */bash) profiles=bash; style=sh ;;
   *) profiles="$HOME/.profile"; style=sh ;;
 esac
@@ -72,7 +72,18 @@ else
   line="export PATH='$quoted_bun':'$quoted_bin':\"\$PATH\""
 fi
 if [ "$profiles" = bash ]; then
-  set -- "$HOME/.bash_profile" "$HOME/.bashrc"
+  if [ -f "$HOME/.bash_profile" ]; then
+    login_profile="$HOME/.bash_profile"
+  elif [ -f "$HOME/.bash_login" ]; then
+    login_profile="$HOME/.bash_login"
+  elif [ -f "$HOME/.profile" ]; then
+    login_profile="$HOME/.profile"
+  else
+    login_profile="$HOME/.bash_profile"
+  fi
+  set -- "$login_profile" "$HOME/.bashrc"
+elif [ "$profiles" = zsh ]; then
+  set -- "${ZDOTDIR:-$HOME}/.zprofile" "${ZDOTDIR:-$HOME}/.zshrc"
 else
   set -- "$profiles"
 fi

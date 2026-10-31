@@ -16,7 +16,7 @@ func TestInstallerPreservesTasksAxi(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, location := range []string{"destination", "path", "previous-install"} {
+	for _, location := range []string{"destination", "path", "previous-install", "bash-login", "bash-profile", "zsh"} {
 		t.Run(location, func(t *testing.T) {
 			root := t.TempDir()
 			home := filepath.Join(root, "home")
@@ -86,13 +86,28 @@ func TestInstallerPreservesTasksAxi(t *testing.T) {
 			}
 			cmd := exec.Command("sh", "install.sh")
 			shell := "/bin/sh"
-			if location == "destination" {
+			if location == "destination" || location == "bash-login" || location == "bash-profile" {
 				shell = "/bin/bash"
 				if err := os.WriteFile(filepath.Join(bindir, "bun"), []byte("#!/bin/sh\nexit 1\n"), 0755); err != nil {
 					t.Fatal(err)
 				}
 			}
-			cmd.Env = append(os.Environ(), "HOME="+home, "SHELL="+shell, "BUN_INSTALL="+filepath.Join(home, ".bun"), "TASKS_TUI_BIN_DIR="+bindir, "FIXTURE_ARCHIVE="+archive, "PATH="+mocks+":"+os.Getenv("PATH"))
+			if location == "zsh" {
+				shell = "/bin/zsh"
+			}
+			loginProfile := ""
+			if location == "bash-login" {
+				loginProfile = ".bash_login"
+			}
+			if location == "bash-profile" {
+				loginProfile = ".profile"
+			}
+			if loginProfile != "" {
+				if err := os.WriteFile(filepath.Join(home, loginProfile), []byte("export EXISTING_PROFILE=kept\n"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cmd.Env = append(os.Environ(), "HOME="+home, "SHELL="+shell, "BUN_INSTALL="+filepath.Join(home, ".bun"), "TASKS_TUI_BIN_DIR="+bindir, "FIXTURE_ARCHIVE="+archive, "ZDOTDIR="+home, "PATH="+mocks+":"+os.Getenv("PATH"))
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("installer failed: %v\n%s", err, out)
 			}
@@ -113,6 +128,32 @@ func TestInstallerPreservesTasksAxi(t *testing.T) {
 					expected := filepath.Join(home, ".bun", "bin") + ":" + bindir + ":/usr/bin:/bin"
 					if err != nil || strings.TrimSpace(string(out)) != filepath.Join(home, ".bun", "bin", "bun")+"\n"+filepath.Join(bindir, "tasks-tui")+"\n"+expected {
 						t.Fatalf("%s session PATH incorrect: %s, %v", profile, out, err)
+					}
+				}
+			}
+			if loginProfile != "" {
+				if _, err := os.Stat(filepath.Join(home, ".bash_profile")); !os.IsNotExist(err) {
+					t.Fatalf("masked existing profile: %v", err)
+				}
+				command := fmt.Sprintf(". %q; printf '%%s\\n' \"$EXISTING_PROFILE\"; command -v tasks-tui", filepath.Join(home, loginProfile))
+				session := exec.Command("bash", "--noprofile", "--norc", "-c", command)
+				session.Env = append(os.Environ(), "HOME="+home, "PATH=/usr/bin:/bin")
+				out, err := session.Output()
+				if err != nil || strings.TrimSpace(string(out)) != "kept\n"+filepath.Join(bindir, "tasks-tui") {
+					t.Fatalf("login profile failed: %s, %v", out, err)
+				}
+			}
+			if location == "zsh" {
+				zsh, err := exec.LookPath("zsh")
+				if err != nil {
+					t.Skip("zsh unavailable")
+				}
+				for _, args := range [][]string{{"-ic", "command -v tasks-tui; command -v bun"}, {"-lic", "command -v tasks-tui; command -v bun"}} {
+					session := exec.Command(zsh, args...)
+					session.Env = append(os.Environ(), "HOME="+home, "ZDOTDIR="+home, "PATH=/usr/bin:/bin")
+					out, err := session.Output()
+					if err != nil || strings.TrimSpace(string(out)) != filepath.Join(bindir, "tasks-tui")+"\n"+filepath.Join(home, ".bun", "bin", "bun") {
+						t.Fatalf("zsh session failed: %s, %v", out, err)
 					}
 				}
 			}

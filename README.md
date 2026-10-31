@@ -48,7 +48,7 @@ The viewer starts in Home, showing up to five recently completed and five recent
 
 ## Task counts
 
-`--count` reads the same discovered or explicitly supplied backlogs as the viewer and prints one line with the default visible total (in progress, queued, blocked, and held) and counts for all six statuses: in progress, queued, blocked, held, done, and archived. Add `--json` for machine-readable counts, including `total_all` (including done and archived), the per-backlog breakdown, and an `errors` list:
+`--count` reads the same discovered or explicitly supplied backlogs as the viewer and prints one line with the default visible total (in flight, queued, blocked, and held) and counts for all six statuses: in flight, queued, blocked, held, done, and archived. Add `--json` for machine-readable counts, including `total_all` (including done and archived), the per-backlog breakdown, and an `errors` list:
 
 ```sh
 tasks-tui --count

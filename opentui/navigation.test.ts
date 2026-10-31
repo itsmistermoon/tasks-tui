@@ -88,7 +88,7 @@ test('panel borders follow focus and task status', async () => {
   expect(overviewBorder('browse','browse','list')).toBe(activeBorder)
   expect(overviewBorder('list','browse','list')).toBe(inactiveBorder)
   expect(overviewBorder('list','list','search')).toBe(inactiveBorder)
-  for(const state of ['In progress','Queued','Blocked','Held','Done']) expect(taskBorder(state).equals(stateColors[state])).toBe(true)
+  for(const state of ['In flight','Queued','Blocked','Held','Done']) expect(taskBorder(state).equals(stateColors[state])).toBe(true)
 })
 
 test('browse navigation reaches the final row without resetting the viewport', async () => {

@@ -4,7 +4,7 @@ export const selectionBackground = "#2d303c";
 export const inactiveBorder = "#50556c";
 export const activeBorder = "#a99cfa";
 export const stateColors: Record<string, RGBA> = {
-  "In progress": RGBA.fromIndex(14),
+  "In flight": RGBA.fromIndex(14),
   Queued: RGBA.fromIndex(12),
   Blocked: RGBA.fromIndex(9),
   Held: RGBA.fromIndex(11),

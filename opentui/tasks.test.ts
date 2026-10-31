@@ -65,7 +65,7 @@ test("counts every displayed status and totals tasks by backlog", () => {
     total: 4,
     total_all: 7,
     statuses: {
-      "In progress": 1,
+      "In flight": 1,
       Queued: 1,
       Blocked: 1,
       Held: 1,
@@ -77,7 +77,7 @@ test("counts every displayed status and totals tasks by backlog", () => {
         total: 4,
         total_all: 6,
         statuses: {
-          "In progress": 1,
+          "In flight": 1,
           Queued: 1,
           Blocked: 1,
           Held: 1,
@@ -89,7 +89,7 @@ test("counts every displayed status and totals tasks by backlog", () => {
         total: 0,
         total_all: 1,
         statuses: {
-          "In progress": 0,
+          "In flight": 0,
           Queued: 0,
           Blocked: 0,
           Held: 0,

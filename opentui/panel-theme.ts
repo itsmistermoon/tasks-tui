@@ -25,3 +25,6 @@ export function overviewBorder(
 export function taskBorder(status: string): RGBA {
   return stateColors[status] ?? RGBA.fromIndex(8);
 }
+export function inspectorHeadingColor(status: string, focused: boolean): RGBA | string {
+  return focused ? taskBorder(status) : "#858796";
+}

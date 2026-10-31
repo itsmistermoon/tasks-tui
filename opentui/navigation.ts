@@ -124,7 +124,11 @@ export function panelLayout(width: number, mode: string, cardsFocused: boolean, 
   };
 }
 
-export type InspectorTab = "detail" | "links" | "history";
+export const inspectorTabs = ["detail", "links", "history"] as const;
+export type InspectorTab = typeof inspectorTabs[number];
+export function isInspectorTab(mode: string): mode is InspectorTab {
+  return inspectorTabs.some((tab) => tab === mode);
+}
 export type NavigationMode = "browse" | "list" | InspectorTab | "help" | "add";
 export type NavigationState = {
   selected: string; opened: Task | null; inspectorMode: InspectorTab;
@@ -154,10 +158,10 @@ export function transitionNavigation(state: NavigationState, action: NavigationA
       if (changed || !task) next.inspectorMode = "detail";
       if (changed) {
         next.expanded = false;
-        if (["detail", "links", "history"].includes(next.modalReturnMode))
+        if (isInspectorTab(next.modalReturnMode))
           next.modalReturnMode = task && open ? "detail" : "list";
       }
-      if (["detail", "links", "history"].includes(next.mode) && changed)
+      if (isInspectorTab(next.mode) && changed)
         next.mode = task && open ? next.inspectorMode : "list";
     }
   };
@@ -171,7 +175,7 @@ export function transitionNavigation(state: NavigationState, action: NavigationA
     if (action.mode === "inspector" && action.task) next.mode = next.inspectorMode;
   } else if (action.type === "focus") {
     next.mode = action.mode;
-    if (["detail", "links", "history"].includes(action.mode)) next.inspectorMode = action.mode as InspectorTab;
+    if (isInspectorTab(action.mode)) next.inspectorMode = action.mode;
   } else if (action.type === "modal") {
     if (next.mode !== "help" && next.mode !== "add") next.modalReturnMode = next.mode;
     next.mode = action.modal;
@@ -186,6 +190,6 @@ export function transitionNavigation(state: NavigationState, action: NavigationA
     next.inspecting = false;
     next.mode = "list";
   }
-  if (!["detail", "links", "history"].includes(next.mode)) next.expanded = false;
+  if (!isInspectorTab(next.mode)) next.expanded = false;
   return next;
 }

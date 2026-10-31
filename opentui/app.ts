@@ -19,6 +19,8 @@ import {
   moveFocus,
   panelLayout,
   transitionNavigation,
+  inspectorTabs,
+  isInspectorTab,
   type NavigationAction,
   type FocusState,
   type NavigationState,
@@ -44,7 +46,7 @@ import {
 import {
   stateColors as colors,
   overviewBorder,
-  taskBorder,
+  inspectorHeadingColor,
   activeBorder,
   inactiveBorder,
   selectionBackground,
@@ -508,7 +510,7 @@ function render(underlay = false) {
     border: true,
     borderStyle: "rounded",
     borderColor:
-      ["detail", "history", "links"].includes(viewMode) && navigation.opened
+      isInspectorTab(viewMode) && navigation.opened
         ? viewingMode === "browse" || viewingMode === "list" || focus === "search" || navigation.cardsFocused
           ? "#50556c"
           : activeBorder
@@ -523,7 +525,7 @@ function render(underlay = false) {
     inspectorArea = panelArea;
     inspectorPanel = p;
   }
-  if (navigation.opened && ["detail", "history", "links"].includes(viewMode)) {
+  if (navigation.opened && isInspectorTab(viewMode)) {
     populateTaskPanel(p, viewMode, oldScroll);
   } else if (split) {
     p.add(line("inspector-empty", "select a task to inspect", "#858796"));
@@ -537,12 +539,12 @@ function populateTaskPanel(
   viewMode: string,
   oldScroll: number,
 ) {
-  if (navigation.opened && ["detail", "history", "links"].includes(viewMode)) {
+  if (navigation.opened && isInspectorTab(viewMode)) {
     const tabs = box("inspector-tabs", { flexDirection: "row", height: 1 });
     p.add(tabs);
-    for (const tab of ["detail", "links", "history"] as const) {
+    const inspectorFocused = isInspectorTab(navigation.mode) && !navigation.cardsFocused && focus !== "search";
+    for (const tab of inspectorTabs) {
       const active = tab === viewMode;
-      const inspectorFocused = ["detail", "links", "history"].includes(navigation.mode) && !navigation.cardsFocused && focus !== "search";
       const tabBox = box("tab-" + tab, { height: 1, backgroundColor: active ? (inspectorFocused ? activeBorder : inactiveBorder) : selectionBackground, shouldFill: true });
       const label = line("tab-label-" + tab, ` ${tab} `, active ? (inspectorFocused ? "#191a29" : "#e0e0e4") : "#858796");
       label.attributes = active ? 1 : 0;
@@ -553,11 +555,11 @@ function populateTaskPanel(
       line(
         "task-heading",
         `${icons[status(navigation.opened)]} ${status(navigation.opened).toLowerCase()} · ${viewMode}`,
-        taskBorder(status(navigation.opened)),
+        inspectorHeadingColor(status(navigation.opened), inspectorFocused),
       ),
     );
     const taskHeading = p.findDescendantById("task-heading");
-    if (taskHeading instanceof TextRenderable) taskHeading.attributes = ["detail", "links", "history"].includes(navigation.mode) && !navigation.cardsFocused ? 1 : 0;
+    if (taskHeading instanceof TextRenderable) taskHeading.attributes = inspectorFocused ? 1 : 0;
   }
   if (viewMode === "detail" && navigation.opened) {
     p.add(line("panel-padding", " ", RGBA.fromIndex(8)));
@@ -727,7 +729,7 @@ function renderActiveView() {
   inspectorArea.remove(inspectorPanel);
   inspectorPanel.destroyRecursively();
   scroll = null;
-  const panel = box("panel", { border: true, borderStyle: "rounded", borderColor: ["detail", "links", "history"].includes(navigation.mode) && !navigation.cardsFocused ? activeBorder : inactiveBorder, paddingLeft: 1, paddingRight: 1, flexGrow: 2, flexBasis: 0 });
+  const panel = box("panel", { border: true, borderStyle: "rounded", borderColor: isInspectorTab(navigation.mode) && !navigation.cardsFocused ? activeBorder : inactiveBorder, paddingLeft: 1, paddingRight: 1, flexGrow: 2, flexBasis: 0 });
   inspectorArea.add(panel);
   inspectorPanel = panel;
   populateTaskPanel(panel, navigation.mode === "list" || navigation.mode === "browse" ? navigation.inspectorMode : navigation.mode, 0);
@@ -1064,7 +1066,7 @@ renderer.keyInput.on("keypress", (key) => {
     render();
     return;
   }
-  if (["detail", "links", "history"].includes(navigation.mode) && ["u", "i", "o"].includes(name) && navigation.opened) {
+  if (isInspectorTab(navigation.mode) && ["u", "i", "o"].includes(name) && navigation.opened) {
     if (name === "o") showHistory();
     else { navigate({ type: "focus", mode: name === "u" ? "detail" : "links" }); linkIndex = 0; linkError = ""; render(); }
     return;
@@ -1074,7 +1076,7 @@ renderer.keyInput.on("keypress", (key) => {
     return;
   }
   if (name === "escape") {
-    if (!["detail", "links", "history"].includes(navigation.mode)) backFromTask();
+    if (!isInspectorTab(navigation.mode)) backFromTask();
     return;
   }
   if (name === "?") {
@@ -1112,7 +1114,7 @@ renderer.keyInput.on("keypress", (key) => {
   if (
     navigation.inspecting &&
     renderer.width < 150 &&
-    ["detail", "links", "history"].includes(navigation.mode) &&
+    isInspectorTab(navigation.mode) &&
     name === "e"
   ) {
     navigate({ type: "expand" });
@@ -1120,7 +1122,7 @@ renderer.keyInput.on("keypress", (key) => {
     return;
   }
   if (
-    ["detail", "links", "history"].includes(navigation.mode) &&
+    isInspectorTab(navigation.mode) &&
     (name === "pageup" || name === "pagedown")
   ) {
     const current = visible.findIndex((t) => t.Key === navigation.opened?.Key);

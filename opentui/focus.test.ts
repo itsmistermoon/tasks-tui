@@ -33,6 +33,19 @@ const first = { Key: "one", Source: "a", Archived: false, Data: { title: "one" }
 const second = { Key: "two", Source: "a", Archived: false, Data: { title: "two" } };
 const state = { selected: "one", opened: first, inspectorMode: "history" as const, inspecting: true, expanded: false, mode: "browse" as const, modalReturnMode: "list" as const, cardsFocused: false, cardIndex: 0 };
 
+test("inspector tabs share focus and heading color rules", async () => {
+  const { isInspectorTab } = await import("./navigation");
+  const { inspectorHeadingColor, stateColors } = await import("./panel-theme");
+  for (const tab of ["detail", "links", "history"]) {
+    expect(isInspectorTab(tab)).toBe(true);
+    expect(inspectorHeadingColor("Done", isInspectorTab(tab))).toEqual(stateColors.Done);
+    for (const mode of ["browse", "list", "help", "add"]) {
+      expect(isInspectorTab(mode)).toBe(false);
+      expect(inspectorHeadingColor("Done", isInspectorTab(mode))).toBe("#858796");
+    }
+  }
+});
+
 test("refresh replaces selection and resets the tab in Browse and inspector", async () => {
   const { transitionNavigation } = await import("./navigation");
   for (const mode of ["browse", "history"]) {

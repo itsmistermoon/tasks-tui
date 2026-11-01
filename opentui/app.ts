@@ -1045,6 +1045,7 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
         navigate({ type: "focus", mode: "list" });
         focus = "list";
         await refresh();
+        chooseBrowse({ source: "", group: "" });
         render();
       },
     };

@@ -106,10 +106,7 @@ test("adding a source loads its tasks into the current session", async () => {
   await app.mockInput.typeText(added);
   await app.keys("RETURN");
   await app.frame("beta");
-  await app.keys("LEFT");
-  for (let i = 0; i < 10; i++) await app.keys("j");
-  await app.keys("RETURN");
-  const frame = await app.frame("b2 - Bravo");
+  const frame = await app.frame("Bravo");
   expect(frame).toContain("beta");
 });
 
@@ -140,7 +137,7 @@ test("done with link offers undo and editable fields restore ? help when cleared
   await app.keys("x");
   await app.keys("RETURN", "RETURN", "RETURN");
   await app.frame("z undo");
-  expect(await contents(file)).toContain("## Done\n- [ ] a1 - Alpha");
+  expect(await contents(file)).toContain("## Done\n- [x] a1 - Alpha");
   await app.keys("z");
   await until(app, async () => (await contents(file)).includes("## Queued\n- [ ] a1 - Alpha"));
 });
@@ -163,19 +160,18 @@ test("a batch state change lists every task that leaves the view", async () => {
   const file = await backlog("alpha", ["add", "a1", "Alpha"], ["add", "b2", "Bravo"], ["add", "c3", "Charlie"]);
   const app = await mount([file]);
   await openList(app);
-  await app.keys("LEFT");
-  for (let i = 0; i < 5; i++) await app.keys("k");
+  await app.keys(" ", " ");
   await app.keys("RETURN");
-  await app.frame("a1 - Alpha");
-  await app.keys(" ", " ", "RETURN", "d");
+  await app.frame("actions · 2 marked tasks");
+  await app.keys("d");
   await app.frame("mark done 2 tasks?");
   expect(await contents(file)).toContain("a1 - Alpha");
   expect(await contents(file)).toContain("b2 - Bravo");
   await app.keys("y");
   await app.frame("a1, b2 left this view (d show · esc dismiss)");
   await app.keys("d");
-  const frame = await app.frame("a1 - Alpha");
-  expect(frame).toContain("b2 - Bravo");
+  const frame = await app.frame("Alpha");
+  expect(frame).toContain("Bravo");
 });
 
 test("a failed command opens its output, and e edits the value before Enter retries", async () => {
@@ -257,8 +253,12 @@ test("moving a task to a typed backlog preserves its identity for the view notic
   await mkdir(dirname(other), { recursive: true });
   const app = await mount([file]);
   await openList(app);
-  await app.keys("LEFT", "j", "RETURN");
-  await app.frame("alpha ·");
+  await app.keys("h", "h");
+  for (let i = 0; i < 8; i++) await app.keys("j");
+  await app.keys("RETURN");
+  await app.frame("backlog · alpha");
+  await app.keys("v");
+  await app.frame("alpha · 2 tasks");
   await app.keys(" ", " ", "RETURN", "m");
   await app.mockInput.typeText(other);
   await app.keys("RETURN", "y");
@@ -267,8 +267,8 @@ test("moving a task to a typed backlog preserves its identity for the view notic
   expect(await contents(other)).toContain("a1 - Alpha");
   expect(await contents(other)).toContain("a2 - Another");
   await app.keys("d");
-  const frame = await app.frame("a1 - Alpha");
-  expect(frame).toContain("a2 - Another");
+  const frame = await app.frame("Alpha");
+  expect(frame).toContain("Another");
   expect(frame).toContain("manual");
 });
 

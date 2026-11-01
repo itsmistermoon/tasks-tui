@@ -1329,7 +1329,8 @@ renderer.keyInput.on("keypress", (key) => {
     }
     navigate({ type: "cards", focused: next.panel === "cards", index: next.cardIndex });
     if (next.panel === "inspector" && panel === "list") {
-      const task = visible.find((t) => t.Key === navigation.selected);
+      // A task moved out of the list by its own action can still be inspected.
+      const task = visible.find((t) => t.Key === navigation.selected) || (navigation.opened?.Key === navigation.selected ? navigation.opened : undefined);
       if (task) { openTask(task); return; }
     } else if (next.panel === "browse") navigate({ type: "focus", mode: "browse" });
     else if (next.panel === "list") {

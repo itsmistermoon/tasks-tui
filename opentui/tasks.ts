@@ -1,4 +1,4 @@
-import { homedir } from "node:os";
+import { basename, dirname } from "node:path";
 
 export type Task = {
   Data: Record<string, any>;
@@ -110,11 +110,35 @@ export function recentTasks(tasks: Task[], limit = 5): Task[] {
   );
 }
 
-export function sourceName(path: string): string {
-  const parts = path.replace(homedir() + "/", "").split("/");
-  if (parts.at(-1) === "backlog.md") parts.pop();
-  if (parts.at(-1) === "data") parts.pop();
-  return parts.reverse().join(" ‹ ");
+// A backlog is named after its project folder: the root holding backlog.md, data/backlog.md or .tasks.toml.
+function projectRoot(path: string): string {
+  let root = dirname(path);
+  if (basename(root) === "data") root = dirname(root);
+  return root;
+}
+
+// Short backlog names; the parent folder is added only where two projects share a name.
+export function backlogNames(paths: string[]): (path: string) => string {
+  const unique = [...new Set(paths)];
+  const short = (path: string) => basename(projectRoot(path));
+  const taken = new Map<string, number>();
+  for (const path of unique) taken.set(short(path), (taken.get(short(path)) || 0) + 1);
+  return (path) => {
+    const root = projectRoot(path);
+    return (taken.get(basename(root)) || 0) > 1 ? `${basename(dirname(root))}/${basename(root)}` : basename(root);
+  };
+}
+
+const searchedFields = ["title", "id", "body", "repo", "kind", "hold_reason"];
+
+// Search matches what the task says, not the names of its fields.
+export function matchesQuery(task: Task, query: string): boolean {
+  if (!query) return true;
+  const needle = query.toLowerCase();
+  return searchedFields.some((field) => {
+    const value = task.Data[field];
+    return value !== undefined && value !== null && value !== "-" && String(value).toLowerCase().includes(needle);
+  });
 }
 
 export function filterTasks(
@@ -124,7 +148,7 @@ export function filterTasks(
   const { query, source, group, showDone } = filters;
   return tasks
     .filter((task) => {
-      if (query && !JSON.stringify(task.Data).toLowerCase().includes(query.toLowerCase())) return false;
+      if (!matchesQuery(task, query)) return false;
       if (source && source !== task.Source) return false;
       if (
         !showDone &&

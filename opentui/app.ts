@@ -40,7 +40,7 @@ import { taskActions, commandArgs, formatCommand, runTasksAxi, type TaskAction, 
 import {
   icons,
   status,
-  sourceName,
+  backlogNames,
   countTasks,
   taskStatuses,
   type Task,
@@ -136,6 +136,7 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
     searchTimer: ReturnType<typeof setTimeout> | undefined,
     stickyText: TextRenderable | null = null,
     sections: { id: string; name: string }[] = [];
+  const backlogName = (path: string) => backlogNames([...data.sources, path])(path);
   let taskLookupPending = !!cli.taskId, taskLookupWarning = "";
   let showingCachedSnapshot = false;
   // Menu entries that act inside the viewer instead of running tasks-axi.
@@ -391,7 +392,7 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
         p.add(keybindBar("action-input-hint", [isNotesEditor ? "ctrl+s review" : actionChoice?.confirm ? "↵ review" : "↵ run", "esc cancel"], { paddingRight: 0 }));
       } else if (overlayMode === "confirm") {
         p.add(text("confirm-warning", actionChoice?.warning || "", RGBA.fromIndex(9), { width: "100%" }));
-        p.add(text("confirm-backlog", new StyledText([fg("#d8d8de")("backlog: "), fg("#86aaf5")(actionTask ? sourceName(actionTask.Source) : "")]), RGBA.defaultForeground(), { width: "100%" }));
+        p.add(text("confirm-backlog", new StyledText([fg("#d8d8de")("backlog: "), fg("#86aaf5")(actionTask ? backlogName(actionTask.Source) : "")]), RGBA.defaultForeground(), { width: "100%" }));
         p.add(line("confirm-gap", " ", RGBA.fromIndex(8)));
         p.add(text("confirm-command", command, RGBA.fromIndex(14), { width: "100%", wrapMode: "char" }));
         p.add(box("confirm-spacer", { flexGrow: 1, minHeight: 1 }));
@@ -826,7 +827,7 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
     p.add(
       line(
         "panel-heading",
-        (group === "home" ? "home · recent activity" : source ? sourceName(source) : "all backlogs") +
+        (group === "home" ? "home · recent activity" : source ? backlogName(source) : "all backlogs") +
           " · " +
           taskListCountLabel(
             data.tasks,
@@ -904,7 +905,7 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
         text(
           "source-" + i,
           truncateText(
-            `${t.Data.repo && t.Data.repo !== "-" ? t.Data.repo + " · " : ""}${sourceName(t.Source)}${t.Archived ? " · archived" : ""}`,
+            `${t.Data.repo && t.Data.repo !== "-" ? t.Data.repo + " · " : ""}${backlogName(t.Source)}${t.Archived ? " · archived" : ""}`,
             Math.max(1, contentWidth()),
             1,
           ),

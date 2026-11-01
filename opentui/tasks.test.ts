@@ -112,3 +112,16 @@ test("recent tasks use closure and archive dates, with undated entries last", ()
   ];
   expect(recentTasks(tasks, 2).map((t) => t.Key)).toEqual(["closed-new", "closed-old", "archived-new", "archived-old"]);
 });
+
+test("backlogs are named after their project and disambiguated only on collision", async () => {
+  const { backlogNames } = await import("./tasks");
+  const name = backlogNames(["/w/app/backlog.md", "/w/site/data/backlog.md", "/a/api/backlog.md", "/b/api/data/backlog.md"]);
+  expect(["/w/app/backlog.md", "/w/site/data/backlog.md", "/a/api/backlog.md", "/b/api/data/backlog.md"].map(name)).toEqual(["app", "site", "a/api", "b/api"]);
+});
+
+test("search matches task values but not field names", async () => {
+  const { matchesQuery } = await import("./tasks");
+  const t = { Key: "k", Source: "s", Archived: false, Data: { id: "fm-1", title: "Fix login", state: "queued", kind: "ship", repo: "web", body: "see notes", hold_reason: "waiting on review" } };
+  for (const query of ["login", "FM-1", "ship", "web", "notes", "review"]) expect(matchesQuery(t, query)).toBe(true);
+  for (const query of ["state", "kind", "queued"]) expect(matchesQuery(t, query)).toBe(false);
+});

@@ -28,11 +28,11 @@ export function helpBindings(panel: HelpPanel, width: number): { title: string; 
     ["d", "show or hide completed tasks"], ["a", "add a task"],
     ["z", "undo a single-task action while its summary shows"],
     ["r", "refresh or reload detail"], ["L", "show, hide, or focus command output"], ["?", "open help"],
-    ["? / ctrl+g", "explain the action in an action dialog"],
+    ["?", "explain the action; in editable fields when empty"],
     ["j k ↑ ↓ pgup pgdn", "scroll command output when focused"], ["esc", "close command output"],
     ["enter / e", "retry / edit a failed command when focused"],
     ["ctrl+s", "review multiline notes when editing"],
-    ["q", "close the open dialog or panel, otherwise quit"], ["ctrl+c", "quit"],
+    ["q", "close menus / confirmations or output; otherwise quit"], ["esc", "cancel an action form"], ["ctrl+c", "quit"],
   ] }];
 }
 

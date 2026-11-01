@@ -85,7 +85,7 @@ Select a task in the list or inspector and press `Enter` to open its actions. Mo
 | `m` | Move to a known backlog, or a typed path, with its connected tasks | `mv <id>... --to <path>` | Yes |
 | `D` | Delete the task | `rm <id>` | Yes |
 
-The menu lists only the actions that apply to the task's current state; archived tasks have none. Actions that need values ask for them in order; optional values can be left blank. Blocking tasks and destination backlogs are chosen from a list that narrows as you type, and a move also accepts a typed path. When a task to move is linked by `blocked-by` to other tasks in its backlog, the confirmation lists the whole connected group and moves it in one `tasks-axi mv`, so no link is stranded. Replace notes opens a multiline editor with the current notes; press `Enter` to add a line, `Ctrl+S` to review the exact command, or `Esc` to cancel. In fields where you type, `Ctrl+G` shows the action's explanation; closing it returns to the same dialog with what you typed.
+The menu lists only the actions that apply to the task's current state; archived tasks have none. Actions that need values ask for them in order; optional values can be left blank. Blocking tasks and destination backlogs are chosen from a list that narrows as you type, and a move also accepts a typed path. When a task to move is linked by `blocked-by` to other tasks in its backlog, the confirmation lists the whole connected group and moves it in one `tasks-axi mv`, so no link is stranded. In an empty editable field, press `?` for the action's explanation; once the field has text, `?` is entered as a character. `Esc` closes the explanation and returns to the field, or cancels the form. Replace notes opens a multiline editor with the current notes; press `Enter` to add a line and `Ctrl+S` to review the exact command.
 
 Actions that cannot be undone, or that affect several tasks, open a dialog that asks the question (for example "delete task a1?"), warns what will be lost or affected, names the affected backlog and tasks, and shows every exact command; press `y` to run it or `n` to cancel. Any other key leaves the dialog open. There is no setting or shortcut that skips this confirmation.
 
@@ -133,7 +133,8 @@ Each action runs `tasks-axi <command> --file <backlog>` against the task's own b
 | `j` / `k`, arrows, Page Up / Page Down | Scroll command output when its panel is focused |
 | `Esc` | Close a dialog, clear the filter or marks, dismiss a notice, or return from status cards |
 | `?` | Open help, or explain the action in an action dialog |
-| `q` | Close the open dialog or command panel, otherwise quit |
+| `q` | Close an action menu, confirmation, or command panel, otherwise quit |
+| `Esc` | Close a dialog or cancel an action form |
 | `Ctrl+C` | Quit |
 
 The interface adapts to the terminal width: the sidebar and inspector use separate panels when space allows.

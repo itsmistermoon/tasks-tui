@@ -33,13 +33,38 @@ test("fields are filled in order and confirmation runs only on y", () => {
 
 test("? explains the action and returns to the same dialog with its values", () => {
   const a = task({ id: "a" });
-  let flow = press(openMenu("actions · a", taskActions([a], context([a]))), "h").flow!;
-  flow = typeValue(flow, "waiting");
-  const explained = flowKey(flow, { name: "g", sequence: "\u0007", ctrl: true }).flow!;
+  const flow = press(openMenu("actions · a", taskActions([a], context([a]))), "h").flow!;
+  const explained = press(flow, "?").flow!;
   expect(explained.stage).toBe("explain");
   const back = press(explained, "x").flow!;
   expect(back).toEqual(flow);
   expect(press(openMenu("m", taskActions([a], context([a]))), "?").flow?.stage).toBe("explain");
+});
+
+test("editable fields explain on ? only while empty; escape cancels and q remains text", () => {
+  const a = task({ id: "a" });
+  let text = press(openMenu("actions · a", taskActions([a], context([a]))), "h").flow!;
+  expect(press(text, "?").flow?.stage).toBe("explain");
+  expect(press(text, "q").handled).toBe(false);
+  expect(press(text, "escape").flow).toBeNull();
+  text = typeValue(text, "wait");
+  expect(press(text, "?").handled).toBe(false);
+
+  const b = task({ id: "b" });
+  let picker = press(openMenu("actions · a", taskActions([a], context([a, b]))), "b").flow!;
+  expect(press(picker, "?").flow?.stage).toBe("explain");
+  picker = typeValue(picker, "b");
+  expect(press(picker, "?").handled).toBe(false);
+  expect(press(picker, "q").handled).toBe(false);
+  expect(press(picker, "escape").flow).toBeNull();
+
+  const notesAction = { ...taskActions([a], context([a])).find((action) => action.key === "n")! };
+  let notes = chooseAction(notesAction, "actions · a").flow!;
+  expect(press(notes, "?").flow?.stage).toBe("explain");
+  expect(press(notes, "q").handled).toBe(false);
+  notes = typeValue(notes, "existing note");
+  expect(press(notes, "?").handled).toBe(false);
+  expect(press(notes, "escape").flow).toBeNull();
 });
 
 test("required fields stay open until filled; optional ones can be skipped", () => {

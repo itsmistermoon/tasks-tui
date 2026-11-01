@@ -16,6 +16,8 @@ export function flowTitle(flow: Flow): string {
 
 const rows = (value: string, width: number) => value.split("\n").reduce((sum, row) => sum + Math.max(1, Math.ceil(Bun.stringWidth(row) / Math.max(1, width))), 0);
 const affected = (flow: Flow) => (flow.stage === "confirm" ? flow.action.affected?.(flow.values) || [] : []);
+const fieldHasValue = (flow: Extract<Flow, { stage: "form" }>, field: NonNullable<ReturnType<typeof currentField>>) =>
+  field.type === "picker" ? !!flow.filter : !!flow.values[field.name];
 
 export function flowSize(flow: Flow, terminalWidth: number): { width: number; height: number } {
   if (flow.stage === "menu") {
@@ -101,11 +103,24 @@ export function renderFlow(renderer: CliRenderer, panel: BoxRenderable, flow: Fl
     const editor = new TextareaRenderable(renderer, { id: "notes-editor", width: "100%", flexGrow: 1, minHeight: 3, initialValue: flow.values[field.name], wrapMode: "word", backgroundColor: "transparent", focusedBackgroundColor: "transparent" });
     panel.add(editor);
     editor.focus();
-    panel.add(hints("field-hint", ["↵ new line", "ctrl+s review", "ctrl+g about", "esc cancel"]));
+    const hint = hints("field-hint", ["↵ new line", "ctrl+s review", ...(fieldHasValue(flow, field) ? [] : ["? about"]), "esc cancel"]);
+    const hintText = hint.findDescendantById("field-hint-text") as TextRenderable;
+    editor.on("input", (value: string) => {
+      onType(value);
+      hintText.content = ["↵ new line", "ctrl+s review", ...(value ? [] : ["? about"]), "esc cancel"].join(" · ");
+    });
+    panel.add(hint);
     return;
   }
   const input = new InputRenderable(renderer, { id: "action-input", width: "100%", value: flow.filter, placeholder: field.type === "picker" ? "type to search" : "", backgroundColor: "transparent", focusedBackgroundColor: "transparent" });
-  input.on("input", onType);
+  const last = flow.field === flow.action.fields.length - 1;
+  const hintItems = (value: string) => [...(field.type === "picker" ? ["↑↓ choose"] : []), last ? (flow.action.confirm ? "↵ review" : "↵ run") : "↵ next", ...(!value ? ["? about"] : []), "esc cancel"];
+  const hint = hints("field-hint", hintItems(flow.filter));
+  const hintText = hint.findDescendantById("field-hint-text") as TextRenderable;
+  input.on("input", (value: string) => {
+    onType(value);
+    hintText.content = hintItems(value).join(" · ");
+  });
   panel.add(input);
   input.focus();
   if (field.type === "picker") {
@@ -120,6 +135,5 @@ export function renderFlow(renderer: CliRenderer, panel: BoxRenderable, flow: Fl
     });
   }
   panel.add(spacer("field-spacer"));
-  const last = flow.field === flow.action.fields.length - 1;
-  panel.add(hints("field-hint", [...(field.type === "picker" ? ["↑↓ choose"] : []), last ? (flow.action.confirm ? "↵ review" : "↵ run") : "↵ next", "ctrl+g about", "esc cancel"]));
+  panel.add(hint);
 }

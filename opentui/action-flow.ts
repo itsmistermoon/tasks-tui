@@ -79,8 +79,8 @@ export function flowKey(flow: Flow, key: FlowKey): FlowStep {
   }
   const field = currentField(flow)!;
   if (name === "escape") return { flow: null, handled: true };
-  // Text fields keep ? as text; ctrl+g opens the explanation there.
-  if ((key.ctrl && name === "g") || (key.sequence === "?" && field.type === "choice")) return explain(flow, flow.action);
+  const value = field.type === "picker" ? flow.filter : flow.values[field.name] ?? "";
+  if (key.sequence === "?" && (field.type === "choice" || !value)) return explain(flow, flow.action);
   if (field.type === "choice") {
     const options = field.options!;
     const move = key.sequence === "j" || name === "down" ? 1 : key.sequence === "k" || name === "up" ? -1 : 0;

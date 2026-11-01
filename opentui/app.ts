@@ -952,9 +952,10 @@ function renderTaskList(p: BoxRenderable, oldScroll: number) {
     }
     setTimeout(restore, 0);
   }
-  const sel = visible.findIndex((t) => t.Key === navigation.selected);
+  // Draw the first heading even when the selected task is not in the list, so
+  // updateSticky never has to fill a blank header on the next tick.
   sticky.content =
-    sel >= 0
+    visible.length
       ? categoryHeading(
           status(visible[0]),
           visible.filter((t) => status(t) === status(visible[0])).length,

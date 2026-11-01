@@ -9,7 +9,7 @@ import {
   StyledText,
   fg,
 } from "@opentui/core";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { homedir } from "node:os";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import {
@@ -1050,6 +1050,7 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
   }
   async function runAction(action: TaskAction, values: Values, commands = action.commands(values)) {
     if (actionRunning) return;
+    const knownSources = new Set(data.sources);
     const selected = data.tasks.find((t) => t.Key === navigation.selected);
     const subject = marked.size ? null : selected || navigation.opened;
     lastAction = { action, values, commands };
@@ -1085,6 +1086,10 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
     }) : [];
     // Read after the write even if a refresh started before it.
     await refreshing;
+    if (movedIds.length) {
+      snapshots.addSource(String(values.to));
+      snapshots.setCacheFile(snapshotCachePath([...cli.sources, String(values.to)], settings.sources));
+    }
     actedKey = subject?.Key || "";
     await refresh();
     actedKey = "";
@@ -1092,7 +1097,7 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
     const target = created
       ? data.tasks.find((t) => t.Source === createdFile && String(t.Data.id) === created && !t.Archived)
       : movedIds.length
-        ? data.tasks.find((t) => t.Source === values.to && movedIds.includes(String(t.Data.id)) && !t.Archived)
+        ? data.tasks.find((t) => (resolve(t.Source) === resolve(String(values.to)) || !knownSources.has(t.Source)) && movedIds.includes(String(t.Data.id)) && !t.Archived)
         : subject ? data.tasks.find((t) => t.Key === subject.Key) : undefined;
     if (created && target) {
       navigate({ type: "select", task: target, mode: "list" });

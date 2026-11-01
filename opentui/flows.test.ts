@@ -1,6 +1,6 @@
 import { afterEach, expect, setDefaultTimeout, test } from "bun:test";
 import { createTestRenderer, type TestRendererSetup } from "@opentui/core/testing";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { mountApp } from "./app";
@@ -214,20 +214,22 @@ test("a task moved out of the view leaves a notice that d follows", async () => 
   expect(await app.frame("✔ done")).toContain("Alpha");
 });
 
-test("moving a task across backlogs preserves its identity for the view notice", async () => {
+test("moving a task to a typed backlog preserves its identity for the view notice", async () => {
   const file = await backlog("alpha", ["add", "a1", "Alpha"]);
-  const other = await backlog("beta", ["add", "b2", "Bravo"]);
-  const app = await mount([file, other]);
+  const other = join(dirname(dirname(file)), "manual", "backlog.md");
+  await mkdir(dirname(other), { recursive: true });
+  const app = await mount([file]);
   await openList(app);
   await app.keys("LEFT", "j", "RETURN");
   await app.frame("alpha ·");
   await app.keys("RETURN", "m");
-  await app.frame("beta ·");
+  await app.mockInput.typeText(other);
   await app.keys("RETURN", "y");
   await app.frame("a1 left this view (d show · esc dismiss)");
   expect(await contents(other)).toContain("a1 - Alpha");
   await app.keys("d");
-  expect(await app.frame("Alpha")).toContain("alpha");
+  const frame = await app.frame("Alpha");
+  expect(frame).toContain("manual");
 });
 
 test("search matches task values, not field names", async () => {

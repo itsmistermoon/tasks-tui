@@ -185,18 +185,17 @@ const questions: Record<string, (subject: string) => string> = {
 };
 
 function moveAction(selection: Task[], context: ActionContext): TaskAction {
-  // A single task brings its connected tasks along, or tasks-axi refuses to strand their links.
-  const moved = selection.length === 1 ? connectedTasks(selection[0], context.tasks) : selection;
+  const moved = [...new Map(selection.flatMap((task) => connectedTasks(task, context.tasks)).map((task) => [task.Key, task])).values()];
   const sources = [...new Set(moved.map((task) => task.Source))];
   const ids = moved.map(id);
   const subject = selection.length === 1 ? id(selection[0]) : `${selection.length} tasks`;
   return {
     key: "m",
     label: "move to backlog",
-    explain: "Moves the task to another backlog file in one atomic tasks-axi transaction. Tasks linked to it by blocked-by in the same backlog move with it, so no dependency is left behind.",
+    explain: "Moves the selected tasks and every task linked to them by blocked-by in the same backlog, without leaving a dependency behind.",
     confirm: true,
     verb: "move",
-    question: moved.length > selection.length ? `move ${subject} and ${moved.length - 1} connected tasks?` : `move ${subject} to another backlog?`,
+    question: moved.length > selection.length ? `move ${subject} and ${moved.length - selection.length} connected tasks?` : `move ${subject} to another backlog?`,
     warning: moved.length > selection.length ? "These tasks are linked by blocked-by in this backlog and move together. They leave this backlog and are written to the destination." : "The tasks leave this backlog and are written to the destination backlog.",
     backlog: sources.map(context.name).join(", "),
     fields: [{

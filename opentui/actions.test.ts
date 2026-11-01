@@ -70,6 +70,14 @@ test("moving a task brings its connected tasks in one command", () => {
   expect(move.commands({ to: "/two" })).toEqual([["mv", "a", "b", "c", "--to", "/two", "--file", "/one/backlog.md"]]);
 });
 
+test("moving marked tasks unions their connected groups without duplicates", () => {
+  const a = task({ id: "a" }), b = task({ id: "b", deps: "blocked-by:a" }), c = task({ id: "c", deps: "blocked-by:b" }), d = task({ id: "d" });
+  const move = taskActions([a, b, d], context([a, b, c, d])).find((action) => action.key === "m")!;
+  expect(move.affected!({})).toEqual(["a", "b", "c", "d"]);
+  expect(move.question).toBe("move 3 tasks and 1 connected tasks?");
+  expect(move.commands({ to: "/two/backlog.md" })).toEqual([["mv", "a", "b", "c", "d", "--to", "/two/backlog.md", "--file", "/one/backlog.md"]]);
+});
+
 test("creating a task mints its id unless one is given", () => {
   const create = createAction("", context());
   expect(create.fields.map((field) => field.name)).toEqual(["title", "id", "backlog", "placement", "kind", "repo", "priority"]);

@@ -44,6 +44,8 @@ export class SnapshotClient {
         stdin: "pipe",
         stdout: "pipe",
         stderr: "ignore",
+        // Bun.spawn otherwise uses the environment from process start.
+        env: process.env,
       });
       this.reader = (
         this.process.stdout as ReadableStream<Uint8Array>

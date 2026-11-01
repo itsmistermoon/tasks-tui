@@ -6,4 +6,4 @@ if [ "${1:-}" = "--count" ]; then
   shift
   exec "$TASKS_TUI_DIR/bin/tasks-backend" --count "$@"
 fi
-exec bun "$TASKS_TUI_DIR/opentui/app.ts" "$@"
+exec bun "$TASKS_TUI_DIR/opentui/main.ts" "$@"

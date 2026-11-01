@@ -63,7 +63,7 @@ export function formatCommand(args: string[]): string {
 export async function runTasksAxi(args: string[], bin = "tasks-axi"): Promise<ActionResult> {
   let child;
   try {
-    child = Bun.spawn(["sh", "-c", 'exec "$@" 2>&1', "tasks-axi", bin, ...args], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+    child = Bun.spawn(["sh", "-c", 'exec "$@" 2>&1', "tasks-axi", bin, ...args], { stdin: "ignore", stdout: "pipe", stderr: "ignore", env: process.env });
   } catch (error) {
     return { ok: false, code: null, summary: String(error), output: String(error) };
   }

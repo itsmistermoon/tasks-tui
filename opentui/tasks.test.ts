@@ -115,8 +115,9 @@ test("recent tasks use closure and archive dates, with undated entries last", ()
 
 test("backlogs are named after their project and disambiguated only on collision", async () => {
   const { backlogNames } = await import("./tasks");
-  const name = backlogNames(["/w/app/backlog.md", "/w/site/data/backlog.md", "/a/api/backlog.md", "/b/api/data/backlog.md"]);
-  expect(["/w/app/backlog.md", "/w/site/data/backlog.md", "/a/api/backlog.md", "/b/api/data/backlog.md"].map(name)).toEqual(["app", "site", "a/api", "b/api"]);
+  const paths = ["/w/app/backlog.md", "/w/site/data/backlog.md", "/a/api/backlog.md", "/b/api/data/backlog.md", "/team-a/apps/web/backlog.md", "/team-b/apps/web/data/backlog.md"];
+  const name = backlogNames(paths);
+  expect(paths.map(name)).toEqual(["app", "site", "a/api", "b/api", "team-a/apps/web", "team-b/apps/web"]);
 });
 
 test("search matches task values but not field names", async () => {

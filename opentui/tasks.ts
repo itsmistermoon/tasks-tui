@@ -119,14 +119,33 @@ function projectRoot(path: string): string {
 
 // Short backlog names; the parent folder is added only where two projects share a name.
 export function backlogNames(paths: string[]): (path: string) => string {
-  const unique = [...new Set(paths)];
-  const short = (path: string) => basename(projectRoot(path));
-  const taken = new Map<string, number>();
-  for (const path of unique) taken.set(short(path), (taken.get(short(path)) || 0) + 1);
-  return (path) => {
-    const root = projectRoot(path);
-    return (taken.get(basename(root)) || 0) > 1 ? `${basename(dirname(root))}/${basename(root)}` : basename(root);
+  const roots = [...new Set(paths.map(projectRoot))];
+  const depth = new Map(roots.map((root) => [root, 1]));
+  const label = (root: string, count: number) => {
+    const parts: string[] = [];
+    let current = root;
+    while (parts.length < count) {
+      const part = basename(current);
+      if (!part) break;
+      parts.unshift(part);
+      const parent = dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+    return parts.join("/");
   };
+  for (;;) {
+    const labels = new Map<string, string[]>();
+    for (const root of roots) {
+      const name = label(root, depth.get(root)!);
+      labels.set(name, [...(labels.get(name) || []), root]);
+    }
+    const collisions = [...labels.values()].filter((group) => group.length > 1);
+    if (!collisions.length) break;
+    for (const root of collisions.flat()) depth.set(root, depth.get(root)! + 1);
+  }
+  const names = new Map(roots.map((root) => [root, label(root, depth.get(root)!)]));
+  return (path) => names.get(projectRoot(path)) || basename(projectRoot(path));
 }
 
 const searchedFields = ["title", "id", "body", "repo", "kind", "hold_reason"];

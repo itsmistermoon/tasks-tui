@@ -106,6 +106,27 @@ test("a reversible action can be undone with z while its summary is shown", asyn
   await until(app, async () => (await contents(file)).includes("## Queued\n- [ ] a1 - Alpha"));
 });
 
+test("done with link offers undo and editable fields restore ? help when cleared", async () => {
+  const file = await backlog("alpha", ["add", "a1", "Alpha"]);
+  const app = await mount([file]);
+  await openList(app);
+  await app.keys("RETURN", "l");
+  await app.frame("pull request URL (optional):");
+  expect(app.captureCharFrame()).toContain("? about");
+  await app.mockInput.typeText("https://example.test/pr/1?");
+  expect(await app.frame("https://example.test/pr/1?")).not.toContain("? about");
+  for (let i = 0; i < 27; i++) app.mockInput.pressKey("BACKSPACE");
+  await app.frame("? about");
+  await app.keys("?");
+  await app.frame("Marks the task done and records what closed it");
+  await app.keys("x");
+  await app.keys("RETURN", "RETURN", "RETURN");
+  await app.frame("z undo");
+  expect(await contents(file)).toContain("## Done\n- [ ] a1 - Alpha");
+  await app.keys("z");
+  await until(app, async () => (await contents(file)).includes("## Queued\n- [ ] a1 - Alpha"));
+});
+
 test("a confirmation runs only after y and n cancels it", async () => {
   const file = await backlog("alpha", ["add", "a1", "Alpha"], ["add", "b2", "Bravo"]);
   const app = await mount([file]);

@@ -38,11 +38,19 @@ test("irreversible actions ask first and reversible ones carry their undo", () =
   expect(actions.every((action) => action.explain && (!action.confirm || (action.warning && action.question && action.verb)))).toBe(true);
   const find = (key: string) => actions.find((action) => action.key === key)!;
   expect(find("d").inverse!({})).toEqual([["reopen", "a", "--file", "/one/backlog.md"], ["start", "a", "--file", "/one/backlog.md"]]);
+  expect(find("l").inverse!({})).toEqual([["reopen", "a", "--file", "/one/backlog.md"], ["start", "a", "--file", "/one/backlog.md"]]);
   expect(find("r").inverse!({})).toEqual([["start", "a", "--file", "/one/backlog.md"]]);
   expect(find("h").commands({ reason: "it's late", until: "2026-12-01" })).toEqual([["hold", "a", "--reason", "it's late", "--until", "2026-12-01", "--file", "/one/backlog.md"]]);
   expect(find("D").inverse).toBeUndefined();
   expect(find("m").inverse).toBeUndefined();
   expect(formatCommand(find("h").commands({ reason: "it's late" })[0])).toBe(`tasks-axi hold a --reason 'it'\\''s late' --file /one/backlog.md`);
+});
+
+test("done with link undo restores queued tasks without removing their links", () => {
+  const t = task({ id: "a" });
+  const action = taskActions([t], context([t])).find((item) => item.key === "l")!;
+  expect(action.inverse!({ pr: "https://example.test/pr/1" })).toEqual([["reopen", "a", "--file", "/one/backlog.md"]]);
+  expect(action.commands({ pr: "https://example.test/pr/1" })).toEqual([["done", "a", "--pr", "https://example.test/pr/1", "--no-prune", "--file", "/one/backlog.md"]]);
 });
 
 test("pickers offer tasks of the same backlog and the current blockers", () => {

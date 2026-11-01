@@ -100,13 +100,14 @@ const specs: Spec[] = [
   },
   {
     key: "l", label: "done with link", applies: open,
-    explain: "Marks the task done and records what closed it: a pull request URL, a report path and a closing note, each optional. On a task that is already done it adds the links without changing its close date.",
+    explain: "Marks the task done and records what closed it: a pull request URL, a report path and a closing note, each optional. Undo reopens it in the state it had; the links remain. On a task that is already done it adds the links without changing its close date.",
     fields: () => [
       { name: "pr", label: "pull request URL (optional):", type: "text", optional: true },
       { name: "report", label: "report path (optional):", type: "text", optional: true },
       { name: "note", label: "closing note (optional):", type: "text", optional: true },
     ],
     args: (task, values) => ["done", id(task), ...optional("--pr", values.pr), ...optional("--report", values.report), ...optional("--note", values.note), "--no-prune"],
+    inverse: (task) => [["reopen", id(task)], ...(task.Data.state === "in_flight" ? [["start", id(task)]] : [])],
   },
   {
     key: "r", label: "reopen", bulk: true, applies: (task) => open(task) && task.Data.state !== "queued",

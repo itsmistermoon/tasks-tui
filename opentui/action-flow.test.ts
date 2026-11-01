@@ -49,6 +49,8 @@ test("editable fields explain on ? only while empty; escape cancels and q remain
   expect(press(text, "escape").flow).toBeNull();
   text = typeValue(text, "wait");
   expect(press(text, "?").handled).toBe(false);
+  text = typeValue(text, "");
+  expect(press(text, "?").flow?.stage).toBe("explain");
 
   const b = task({ id: "b" });
   let picker = press(openMenu("actions · a", taskActions([a], context([a, b]))), "b").flow!;
@@ -56,6 +58,8 @@ test("editable fields explain on ? only while empty; escape cancels and q remain
   picker = typeValue(picker, "b");
   expect(press(picker, "?").handled).toBe(false);
   expect(press(picker, "q").handled).toBe(false);
+  picker = typeValue(picker, "");
+  expect(press(picker, "?").flow?.stage).toBe("explain");
   expect(press(picker, "escape").flow).toBeNull();
 
   const notesAction = { ...taskActions([a], context([a])).find((action) => action.key === "n")! };
@@ -64,6 +68,8 @@ test("editable fields explain on ? only while empty; escape cancels and q remain
   expect(press(notes, "q").handled).toBe(false);
   notes = typeValue(notes, "existing note");
   expect(press(notes, "?").handled).toBe(false);
+  notes = typeValue(notes, "");
+  expect(press(notes, "?").flow?.stage).toBe("explain");
   expect(press(notes, "escape").flow).toBeNull();
 });
 

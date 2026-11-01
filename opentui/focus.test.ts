@@ -39,7 +39,7 @@ test("inspector tabs share focus and heading color rules", async () => {
   for (const tab of ["detail", "links", "history"]) {
     expect(isInspectorTab(tab)).toBe(true);
     expect(inspectorHeadingColor("Done", isInspectorTab(tab))).toEqual(stateColors.Done);
-    for (const mode of ["browse", "list", "help", "add"]) {
+    for (const mode of ["browse", "list", "help", "action"]) {
       expect(isInspectorTab(mode)).toBe(false);
       expect(inspectorHeadingColor("Done", isInspectorTab(mode))).toBe("#858796");
     }

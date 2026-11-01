@@ -17,6 +17,7 @@ export function projectView(tasks: Task[], sources: string[], { source, group, q
     ...taskStatuses.map((v) => ({ label: `${icons[v]} ${v.toLowerCase()}`, count: counts.statuses[v], source, group: `status:${v}` })),
     { label: "all backlogs", count: showDone ? totals.total_all : totals.total, source: "", group: "", section: "sources" },
     ...sources.map((p) => ({ label: name(p), count: (showDone ? totals.sources[p]?.total_all : totals.sources[p]?.total) || 0, source: p, group: "" })),
+    { label: "+ add source", source: "", group: "add-source" },
   ];
   for (const [key, section] of [["kind", "types"], ["repo", "repositories"]]) {
     const value = (task: Task) => task.Data[key] && task.Data[key] !== "-" ? String(task.Data[key]) : "unspecified";

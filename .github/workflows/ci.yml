@@ -1,0 +1,25 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - name: Install tasks-axi
+        run: bun add -g tasks-axi@0.2.6 && echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+      - run: bun install --frozen-lockfile
+        working-directory: opentui
+      - run: go build -o bin/tasks-backend .
+      - run: go vet ./...
+      - run: go test ./...
+      - run: bun test
+        working-directory: opentui

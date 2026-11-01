@@ -36,7 +36,9 @@ import { SnapshotClient, snapshotCachePath } from "./snapshot-client";
 import { footerHints, helpContent, helpDimensions, type HelpPanel } from "./help";
 import { parseArgs, resolveTask } from "./cli";
 import { taskListCountLabel } from "./task-list-count";
-import { taskActions, commandArgs, formatCommand, runTasksAxi, type TaskAction, type ActionResult } from "./actions";
+import { backlogActions, createAction, taskActions, formatCommand, runTasksAxi, type ActionContext, type ActionResult, type TaskAction, type Values } from "./actions";
+import { flowSize, flowTitle, renderFlow } from "./action-dialog";
+import { chooseAction, currentField, flowKey, flowCommands, openMenu, pickerOptions, typeValue, type Flow, type FlowStep } from "./action-flow";
 import {
   icons,
   status,
@@ -128,7 +130,6 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
     input: InputRenderable | null = null,
     searchText = "",
     historyText = "",
-    addPath = "",
     linkError = "",
     linkIndex = 0,
     lastRenderedMode = "",
@@ -139,13 +140,14 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
   const backlogName = (path: string) => backlogNames([...data.sources, path])(path);
   let taskLookupPending = !!cli.taskId, taskLookupWarning = "";
   let showingCachedSnapshot = false;
-  // Menu entries that act inside the viewer instead of running tasks-axi.
-  type MenuItem = TaskAction & { run?: () => void };
-  let actionTask: Task | null = null,
-    actionMenu: MenuItem[] = [],
-    actionIndex = 0,
-    actionChoice: TaskAction | null = null,
-    actionValue = "",
+  let flow: Flow | null = null,
+    // Tasks marked with space; the action menu then applies to all of them.
+    marked = new Set<string>(),
+    // Persistent notice for a task that its own action moved out of the current view.
+    notice: Task | null = null,
+    // The last action run, kept for retry and edit after a failure.
+    lastAction: { action: TaskAction; values: Values; commands: string[][] } | null = null,
+    undo: string[][] | null = null,
     actionResult: ActionResult | null = null,
     actionRunning = false,
     actedKey = "",
@@ -248,7 +250,8 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
   function render(underlay = false) {
     const viewingMode = underlay ? navigation.modalReturnMode : navigation.mode;
     nav();
-    if (viewingMode !== "browse" || navigation.cardsFocused) {
+    // A dialog opened from Browse keeps the Browse cursor where it was.
+    if ((isModal(viewingMode) ? navigation.modalReturnMode : viewingMode) !== "browse" || navigation.cardsFocused) {
       const active = navItems.findIndex((item) => item.source === source && item.group === group);
       if (active >= 0) navIndex = active;
     }
@@ -281,19 +284,7 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
           background.borderColor = inactiveBorder;
       }
       const modalSize = (width: number, height: number) => ({ width: Math.max(1, Math.min(renderer.width - 2, width)), height: Math.max(3, Math.min(renderer.height - 2, height)) });
-      const actionLabel = (action: MenuItem) => action.label + (action.confirm ? "…" : "");
-      const actionsWidth = () => Math.max(Bun.stringWidth(`actions · ${actionTask?.Data.id}`), Bun.stringWidth("j/k choose · ↵ run · esc close"), ...actionMenu.map((action) => Bun.stringWidth(actionLabel(action)) + 6)) + 4;
-      const command = actionTask && actionChoice ? formatCommand(commandArgs(actionChoice, actionTask, actionValue)) : "";
-      const size = overlayMode === "help"
-        ? helpDimensions(helpPanel, renderer.width, renderer.height)
-        : overlayMode === "actions"
-          ? modalSize(actionsWidth(), actionMenu.length + 6)
-          : overlayMode === "confirm"
-            ? modalSize(76, Math.ceil(Bun.stringWidth(command) / 70) + Math.ceil(Bun.stringWidth(actionChoice?.warning || "") / 70) + 9)
-            : overlayMode === "input" && actionChoice?.key === "n"
-              ? modalSize(76, Math.max(12, Math.min(26, String(actionChoice.input?.initial || "").split("\n").length + 8)))
-              : modalSize(64, 9);
-      const { width, height } = size;
+      const { width, height } = overlayMode === "help" ? helpDimensions(helpPanel, renderer.width, renderer.height) : (() => { const size = flowSize(flow!, renderer.width); return modalSize(size.width, size.height); })();
       const p = box("modal", {
         position: "absolute",
         left: Math.max(0, Math.floor((renderer.width - width) / 2)),
@@ -309,97 +300,12 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
         shouldFill: true,
       });
       renderer.root.add(p);
-      const modalTitle = line("modal-title", overlayMode === "help" ? "help" : overlayMode === "add" ? "add source" : overlayMode === "actions" ? `actions · ${actionTask?.Data.id}` : overlayMode === "confirm" ? actionChoice?.question || "" : `${actionChoice?.label} · ${actionTask?.Data.id}`, activeBorder);
+      const modalTitle = line("modal-title", overlayMode === "help" ? "help" : flowTitle(flow!), activeBorder);
       modalTitle.attributes = 1;
       p.add(modalTitle);
       p.add(line("modal-title-gap", " ", RGBA.fromIndex(8)));
-      if (overlayMode === "add") {
-        p.add(line("add-label", "path to backlog file or directory:", "#b8bac5"));
-        const field = new InputRenderable(renderer, {
-          id: "add-input",
-          width: "100%",
-          value: addPath,
-          backgroundColor: "transparent",
-          focusedBackgroundColor: "transparent",
-        });
-        p.add(field);
-        field.on("input", (value: string) => {
-          addPath = value;
-        });
-        field.on("enter", async () => {
-          if (!addPath.trim()) return;
-          const path = addPath.trim().replace(/^~(?=\/)/, homedir());
-          settings.sources = [...new Set([...settings.sources, path])];
-          await save();
-          snapshots.setCacheFile(snapshotCachePath(cli.sources, settings.sources));
-          addPath = "";
-          navigate({ type: "focus", mode: "list" });
-          focus = "list";
-          await refresh();
-          render();
-        });
-        field.focus();
-        p.add(box("add-spacer", { flexGrow: 1, minHeight: 1 }));
-        p.add(keybindBar("add-hint", ["↵ add", "esc back"], { paddingRight: 0 }));
-      } else if (overlayMode === "actions") {
-        const labelWidth = Math.max(1, Math.min(renderer.width - 2, actionsWidth()) - 7);
-        actionMenu.forEach((action, i) => {
-          const row = box("action-" + i, { flexDirection: "row", width: "100%", height: 1 });
-          const label = line("action-label-" + i, truncateText((i === actionIndex ? "› " : "  ") + actionLabel(action), labelWidth, 1), i === actionIndex ? activeBorder : "#d8d8de");
-          label.attributes = i === actionIndex ? 1 : 0;
-          label.flexGrow = 1;
-          row.add(label);
-          row.add(text("action-key-" + i, action.key, "#858796", { width: 1, height: 1, flexShrink: 0 }));
-          p.add(row);
-        });
-        p.add(box("actions-spacer", { flexGrow: 1, minHeight: 1 }));
-        p.add(keybindBar("actions-hint", ["j/k choose", "↵ run", "esc close"], { paddingRight: 0 }));
-      } else if (overlayMode === "input") {
-        p.add(line("action-input-label", actionChoice?.input?.label || "", "#b8bac5"));
-        const isNotesEditor = actionChoice?.key === "n";
-        const field = isNotesEditor
-          ? new TextareaRenderable(renderer, {
-              id: "notes-editor",
-              width: "100%",
-              flexGrow: 1,
-              minHeight: 3,
-              initialValue: actionValue,
-              wrapMode: "word",
-              backgroundColor: "transparent",
-              focusedBackgroundColor: "transparent",
-            })
-          : new InputRenderable(renderer, {
-              id: "action-input",
-              width: "100%",
-              value: actionValue,
-              backgroundColor: "transparent",
-              focusedBackgroundColor: "transparent",
-            });
-        p.add(field);
-        if (!isNotesEditor) {
-          field.on("input", (value: string) => {
-            actionValue = value;
-          });
-          field.on("enter", () => {
-            if (actionChoice?.confirm) {
-              navigate({ type: "modal", modal: "confirm" });
-              render();
-            } else runAction();
-          });
-        }
-        field.focus();
-        if (!isNotesEditor) p.add(box("action-input-spacer", { flexGrow: 1, minHeight: 1 }));
-        p.add(keybindBar("action-input-hint", [isNotesEditor ? "ctrl+s review" : actionChoice?.confirm ? "↵ review" : "↵ run", "esc cancel"], { paddingRight: 0 }));
-      } else if (overlayMode === "confirm") {
-        p.add(text("confirm-warning", actionChoice?.warning || "", RGBA.fromIndex(9), { width: "100%" }));
-        p.add(text("confirm-backlog", new StyledText([fg("#d8d8de")("backlog: "), fg("#86aaf5")(actionTask ? backlogName(actionTask.Source) : "")]), RGBA.defaultForeground(), { width: "100%" }));
-        p.add(line("confirm-gap", " ", RGBA.fromIndex(8)));
-        p.add(text("confirm-command", command, RGBA.fromIndex(14), { width: "100%", wrapMode: "char" }));
-        p.add(box("confirm-spacer", { flexGrow: 1, minHeight: 1 }));
-        const decision = box("confirm-hint", { flexDirection: "row", justifyContent: "flex-end", width: "100%", height: 1, flexShrink: 0 });
-        decision.add(line("confirm-keys", new StyledText([fg(activeBorder)("[y]"), fg("#d8d8de")(` ${actionChoice?.verb}   `), fg(activeBorder)("[n]"), fg("#d8d8de")(" cancel")]) as any, RGBA.defaultForeground()));
-        p.add(decision);
-      } else {
+      if (overlayMode === "action" && flow) renderFlow(renderer, p, flow, width, (value) => { if (flow) flow = typeValue(flow, value); });
+      else {
         p.add(text("help-text", helpContent(helpPanel, renderer.width), "#d8d8de", { width: "100%", flexGrow: 1 }));
         const closeHint = box("help-close-row", { flexDirection: "row", justifyContent: "flex-end", width: "100%", height: 1, flexShrink: 0 });
         closeHint.add(line("help-close-hint", "press any key to close", "#858796"));
@@ -456,11 +362,17 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
       location.add(line("breadcrumb", group === "home" ? "home" : `${category} > ${current?.label || "all"}`, focus === "search" ? "#858796" : RGBA.defaultForeground()));
       if ((actionRunning || actionResult) && focus !== "search") {
         // The footer has one line, so a multi-line tasks-axi error is joined onto it.
-        const message = actionRunning ? "running tasks-axi…" : actionResult!.summary;
+        const message = actionRunning ? "running tasks-axi…" : actionResult!.summary + (undo ? "  · z undo" : "");
         const result = line("action-result", "  " + message, actionRunning ? "#858796" : actionResult!.ok ? colors.Done : RGBA.fromIndex(9));
         result.flexShrink = 1;
         location.add(result);
       }
+      if (notice && focus !== "search") {
+        const hidden = line("notice", `  ${notice.Data.id} left this view (d show · esc dismiss)`, "#e8bb65");
+        hidden.flexShrink = 1;
+        location.add(hidden);
+      }
+      if (marked.size && focus !== "search") location.add(line("marked", `  ${marked.size} marked`, activeBorder));
       if (focus === "search" && input) {
         location.add(line("filter-prefix", " / ", "#858796"));
         input.width = 1;
@@ -471,7 +383,8 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
       }
       const panel: HelpPanel = navigation.cardsFocused ? "cards" : viewingMode as HelpPanel;
       if (updatedAt) footer.add(text("updated-at", `updated ${updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}  `, RGBA.defaultForeground(), { height: 1, flexShrink: 0 }));
-      footer.add(keybindBar("footer", footerHints(panel, renderer.width, focus === "search"), { width: "auto", flexShrink: 0 }));
+      // A notice takes the room of the key hints, which stay available with ?.
+      footer.add(keybindBar("footer", footerHints(panel, notice ? 0 : renderer.width, focus === "search"), { width: "auto", flexShrink: 0 }));
     };
     const area = box("area", { flexDirection: "row", flexGrow: 1 });
     frame.add(area);
@@ -896,7 +809,7 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
       titleBox.add(
         text(
           "title-" + i,
-          truncateText(String(t.Data.title), Math.max(1, contentWidth()), 2),
+          truncateText((marked.has(t.Key) ? "◆ " : "") + String(t.Data.title), Math.max(1, contentWidth()), 2),
           colors[state],
           { width: "100%" },
         ),
@@ -1076,72 +989,134 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
     commandBody = body;
     panel.add(body);
     const canScroll = commandMaxScroll > 0;
-    panel.add(keybindBar("command-log-hint", [...(canScroll ? ["j/k scroll"] : []), ...(!result.ok && logFocused && actionChoice?.input ? ["e edit"] : []), ...(!result.ok && logFocused ? ["↵ retry"] : []), "esc close"], { paddingRight: 0, justifyContent: "flex-start" }));
+    panel.add(keybindBar("command-log-hint", [...(canScroll ? ["j/k scroll"] : []), ...(!result.ok && logFocused && lastAction?.action.fields.length ? ["e edit"] : []), ...(!result.ok && logFocused ? ["↵ retry"] : []), "esc close"], { paddingRight: 0, justifyContent: "flex-start" }));
     return panel;
   }
+  const actionContext = (): ActionContext => ({ tasks: data.tasks, backlogs: data.sources, name: backlogName });
+  function openFlow(next: Flow | null) {
+    flow = next;
+    if (flow) {
+      if (navigation.mode !== "action") navigate({ type: "modal", modal: "action" });
+    } else if (navigation.mode === "action") navigate({ type: "dismiss" });
+    render();
+  }
+  function applyStep(step: FlowStep) {
+    if (step.effect) {
+      flow = null;
+      if (navigation.mode === "action") navigate({ type: "dismiss" });
+      if (step.effect.action.run) { render(); step.effect.action.run(step.effect.values); }
+      else runAction(step.effect.action, step.effect.values);
+      return;
+    }
+    openFlow(step.flow);
+  }
   function openActions(task: Task) {
-    actionTask = structuredClone(task);
-    const link = navigation.mode === "links" ? linkEntries()[linkIndex] : undefined;
-    actionMenu = [
-      ...(link ? [{ key: "o", label: link.task ? "open task " + link.label : "open " + link.label, confirm: false, args: () => [], run: () => activateLink(linkIndex) }] : []),
-      ...taskActions(task),
+    // Marked tasks share one menu; otherwise it acts on the selected task.
+    const selection = marked.size ? data.tasks.filter((item) => marked.has(item.Key)) : [task];
+    const link = navigation.mode === "links" && !marked.size ? linkEntries()[linkIndex] : undefined;
+    const actions: TaskAction[] = [
+      ...(link ? [{ key: "o", label: link.task ? "open task " + link.label : "open " + link.label, explain: "Opens the selected link: web links in the browser, report paths with the system's default application, and tasks in the viewer.", confirm: false, fields: [], commands: () => [], run: () => activateLink(linkIndex) }] : []),
+      ...taskActions(selection, actionContext()),
     ];
-    actionIndex = 0;
     actionResult = null;
-    if (!actionMenu.length) {
-      actionResult = { ok: false, code: null, summary: "archived tasks have no actions", output: "" };
+    if (!actions.length) {
+      actionResult = { ok: false, code: null, summary: selection.length > 1 ? "no action applies to every marked task" : "archived tasks have no actions", output: "" };
       render();
       return;
     }
-    navigate({ type: "modal", modal: "actions" });
-    render();
+    openFlow(openMenu(selection.length > 1 ? `actions · ${selection.length} marked tasks` : `actions · ${task.Data.id}`, actions));
   }
-  function chooseAction(action: MenuItem) {
-    if (action.run) {
-      navigate({ type: "dismiss" });
-      render();
-      action.run();
-      return;
-    }
-    actionChoice = action;
-    actionValue = action.input?.initial || "";
-    if (action.input) navigate({ type: "modal", modal: "input" });
-    else if (action.confirm) navigate({ type: "modal", modal: "confirm" });
-    else {
-      runAction();
-      return;
-    }
-    render();
+  function openBacklogMenu(item: BrowseItem) {
+    const show: TaskAction = { key: "v", label: "show tasks", explain: "Shows the tasks of this backlog in the task list.", confirm: false, fields: [], commands: () => [], run: () => chooseBrowse(item) };
+    openFlow(openMenu(`backlog · ${backlogName(item.source)}`, [show, ...backlogActions(item.source, actionContext())]));
   }
-  async function runAction() {
-    const task = actionTask, action = actionChoice;
-    if (!task || !action || actionRunning) return;
-    navigate({ type: "dismiss" });
+  function addSourceAction(): TaskAction {
+    return {
+      key: "a", label: "add source", confirm: false,
+      explain: "Adds a backlog file or a project directory to the sources the viewer reads. It is saved in the settings and read on every start.",
+      fields: [{ name: "path", label: "path to backlog file or directory:", type: "text" }],
+      commands: () => [],
+      run: async (values) => {
+        const path = values.path.trim().replace(/^~(?=\/)/, homedir());
+        settings.sources = [...new Set([...settings.sources, path])];
+        await save();
+        snapshots.setCacheFile(snapshotCachePath(cli.sources, settings.sources));
+        navigate({ type: "focus", mode: "list" });
+        focus = "list";
+        await refresh();
+        render();
+      },
+    };
+  }
+  async function runAction(action: TaskAction, values: Values, commands = action.commands(values)) {
+    if (actionRunning) return;
+    const selected = data.tasks.find((t) => t.Key === navigation.selected);
+    const subject = marked.size ? null : selected || navigation.opened;
+    lastAction = { action, values, commands };
     actionRunning = true;
+    notice = null;
     render();
-    const args = commandArgs(action, task, actionValue);
-    const result = await runTasksAxi(args, tasksAxi);
+    // Commands run in order and stop at the first failure; retry resumes from the failed one.
+    let output = "", result: ActionResult = { ok: true, code: 0, summary: "", output: "" };
+    let done = 0;
+    for (const args of commands) {
+      result = await runTasksAxi(args, tasksAxi);
+      output += (output ? "\n" : "") + result.output.replace(/\n$/, "");
+      if (!result.ok) break;
+      done++;
+    }
     actionRunning = false;
-    lastRun = { command: formatCommand(args), result };
+    const summary = commands.length > 1 && result.ok ? `${icons.Done} ${action.label} · ${commands.length} tasks` : result.summary;
+    result = { ...result, summary, output };
+    lastRun = { command: commands.slice(0, done + (result.ok ? 0 : 1)).map(formatCommand).join("\n"), result };
+    lastAction = { action, values, commands: commands.slice(done) };
+    undo = result.ok && action.inverse ? action.inverse(values) : null;
     // Successes stay in the status bar; failures open the command log with tasks-axi's guidance.
     actionResult = result.ok ? result : null;
-    if (result.ok) { logOpen = false; logFocused = false; }
+    if (result.ok) { logOpen = false; logFocused = false; if (commands.length > 1 || marked.size) marked = new Set(); }
     else { logOpen = true; logFocused = true; commandScrollTop = 0; }
     if (renderer.isDestroyed) return;
+    // A created task is selected; tasks-axi prints its id, which may have been generated.
+    const created = action.key === "a" && result.ok ? /^ok: added (\S+)/m.exec(output)?.[1] : undefined;
+    const createdFile = created ? commands[0][commands[0].indexOf("--file") + 1] : "";
     // Read after the write even if a refresh started before it.
     await refreshing;
-    actedKey = task.Key;
+    actedKey = subject?.Key || "";
     await refresh();
     actedKey = "";
     if (renderer.isDestroyed) return;
-    const updated = data.tasks.find((t) => t.Key === task.Key);
-    if (navigation.opened?.Key === task.Key) {
-      navigate({ type: "select", task: updated || null, reload: true });
+    const target = created ? data.tasks.find((t) => t.Source === createdFile && String(t.Data.id) === created && !t.Archived) : subject ? data.tasks.find((t) => t.Key === subject.Key) : undefined;
+    if (created && target) {
+      navigate({ type: "select", task: target, mode: "list" });
+    } else if (subject && navigation.opened?.Key === subject.Key) {
+      navigate({ type: "select", task: target || null, reload: true });
       changes = [];
       pending = null;
     }
-    listTasks(updated);
-    revealSelected = visible.some((t) => t.Key === task.Key);
+    listTasks(target);
+    revealSelected = !!target && visible.some((t) => t.Key === target.Key);
+    if (result.ok && target && !visible.some((t) => t.Key === target.Key)) notice = target;
+    render();
+  }
+  // Brings a task that left the view back: show done tasks, or switch to its new status.
+  function revealNotice() {
+    const task = notice;
+    notice = null;
+    if (!task) return;
+    const withDone = projectView(data.tasks, data.sources, { query, source, group, showDone: true }).tasks;
+    if (!showDone && withDone.some((t) => t.Key === task.Key)) {
+      showDone = true;
+      settings.showDone = true;
+      save();
+    } else {
+      source = "";
+      group = `status:${status(task)}`;
+      query = "";
+      searchText = "";
+    }
+    listTasks(task);
+    navigate({ type: "select", task, mode: "list" });
+    revealSelected = true;
     render();
   }
   function linkEntries(): { label: string; url?: string; task?: Task }[] {
@@ -1218,47 +1193,18 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
       render();
       return;
     }
-    if (navigation.mode === "add" || navigation.mode === "input") {
-      if (navigation.mode === "input" && actionChoice?.key === "n" && key.ctrl && key.sequence === "s") {
-        key.preventDefault();
-        const editor = renderer.root.findDescendantById("notes-editor");
-        if (editor instanceof TextareaRenderable) {
-          actionValue = editor.plainText;
-          navigate({ type: "modal", modal: "confirm" });
-          render();
-        }
+    if (navigation.mode === "action" && flow) {
+      // The notes editor reports its text when it is submitted or explained.
+      const editor = renderer.root.findDescendantById("notes-editor");
+      if (editor instanceof TextareaRenderable) flow = typeValue(flow, editor.plainText);
+      const step = flowKey(flow, { name: key.name, sequence: key.sequence, ctrl: key.ctrl });
+      if (!step.handled) {
+        // Typing into a picker changes its matches, which are drawn after the input updates.
+        if (currentField(flow)?.type === "picker") setTimeout(() => { if (navigation.mode === "action") render(); }, 0);
         return;
       }
-      if (key.name === "escape") {
-        navigate({ type: "dismiss" });
-        addPath = "";
-        render();
-      }
-      return;
-    }
-    if (navigation.mode === "actions") {
-      const name = ({ j: "down", k: "up" } as Record<string, string>)[key.sequence] || key.name;
-      if (name === "escape") {
-        navigate({ type: "dismiss" });
-        render();
-      } else if (name === "up" || name === "down") {
-        actionIndex = Math.max(0, Math.min(actionMenu.length - 1, actionIndex + (name === "down" ? 1 : -1)));
-        render();
-      } else {
-        const action = name === "return" ? actionMenu[actionIndex] : actionMenu.find((item) => item.key === key.sequence);
-        if (action) {
-          key.preventDefault();
-          chooseAction(action);
-        }
-      }
-      return;
-    }
-    if (navigation.mode === "confirm") {
-      if (key.name === "y") runAction();
-      else if (key.name === "n" || key.name === "escape") {
-        navigate({ type: "dismiss" });
-        render();
-      }
+      key.preventDefault();
+      applyStep(step);
       return;
     }
     if (logOpen && lastRun) {
@@ -1290,14 +1236,20 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
       if (logFocused && (key.name === "down" || key.name === "j")) { scrollCommand(1); return; }
       if (logFocused && key.name === "pageup") { scrollCommand(-10); return; }
       if (logFocused && key.name === "pagedown") { scrollCommand(10); return; }
-      if (logFocused && !lastRun.result.ok && key.name === "return") {
-        runAction();
+      if (logFocused && !lastRun.result.ok && key.name === "return" && lastAction) {
+        runAction(lastAction.action, lastAction.values, lastAction.commands);
         return;
       }
-      if (logFocused && !lastRun.result.ok && key.sequence === "e" && actionChoice?.input) {
+      if (logFocused && !lastRun.result.ok && key.sequence === "e" && lastAction?.action.fields.length) {
         key.preventDefault();
         logOpen = false;
-        navigate({ type: "modal", modal: "input" });
+        logFocused = false;
+        openFlow(chooseAction(lastAction.action, String(navigation.opened?.Data.id ?? ""), lastAction.values).flow);
+        return;
+      }
+      if (key.sequence === "q") {
+        logOpen = false;
+        logFocused = false;
         render();
         return;
       }
@@ -1313,8 +1265,17 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
       render();
       return;
     }
+    if (key.sequence === "z" && actionResult?.ok && undo && !actionRunning) {
+      const commands = undo;
+      undo = null;
+      runAction({ key: "z", label: "undo", explain: "", confirm: false, fields: [], commands: () => commands }, {});
+      return;
+    }
+    if (notice && key.name === "escape") { notice = null; render(); return; }
+    if (notice && key.sequence === "d") { revealNotice(); return; }
     if (actionResult) {
       actionResult = null;
+      undo = null;
       const result = renderer.root.findDescendantById("action-result");
       if (result instanceof TextRenderable) result.content = "";
     }
@@ -1368,7 +1329,20 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
       renderer.destroy();
       return;
     }
-    if (name === "escape") return;
+    if (name === "escape") {
+      if (marked.size) { marked = new Set(); render(); }
+      return;
+    }
+    if (name === "space" && navigation.mode === "list") {
+      const index = visible.findIndex((t) => t.Key === navigation.selected);
+      const task = visible[index];
+      if (!task) return;
+      if (marked.has(task.Key)) marked.delete(task.Key);
+      else marked.add(task.Key);
+      if (visible[index + 1]) navigate({ type: "select", task: visible[index + 1] });
+      render();
+      return;
+    }
     if (name === "return" && (isInspectorTab(navigation.mode) || navigation.mode === "list")) {
       // A task moved out of the list by its own action stays selected in the inspector.
       const task = isInspectorTab(navigation.mode) || navigation.opened?.Key === navigation.selected ? navigation.opened : visible.find((t) => t.Key === navigation.selected);
@@ -1390,8 +1364,8 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
     }
     if (name === "a") {
       key.preventDefault();
-      navigate({ type: "modal", modal: "add" });
-      render();
+      // The new task goes to the backlog of the current filter, or one picked from the list.
+      openFlow(chooseAction(createAction(source, actionContext()), source ? backlogName(source) : "all backlogs").flow);
       return;
     }
     if (name === "d") {
@@ -1476,7 +1450,9 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
         return;
       } else if (name === "return") {
         const n = navItems[navIndex];
-        if (n) chooseBrowse(n);
+        if (n?.group === "add-source") openFlow(chooseAction(addSourceAction(), "sources").flow);
+        else if (n?.source && !n.group) openBacklogMenu(n);
+        else if (n) chooseBrowse(n);
       }
       return;
     }

@@ -9,13 +9,13 @@ export function helpBindings(panel: HelpPanel, width: number): { title: string; 
   let bindings: Binding[];
   if (panel === "browse") {
     title = "browse";
-    bindings = [...commonList, ["enter", "open selected view"]];
+    bindings = [...commonList, ["enter", "open selected view; on a backlog, its menu"]];
   } else if (panel === "cards") {
     title = "status cards";
     bindings = [["← → h l", "select status"], ["↓ j", "go to task list"], ["enter", "open selected status"]];
   } else if (panel === "list") {
     title = "backlog";
-    bindings = [...commonList, ["enter", "task actions"], ["→ l", "open inspector"], ["↑ k", "from first task, go to cards in Home"]];
+    bindings = [...commonList, ["enter", "task actions, or actions for marked tasks"], ["space", "mark or unmark task"], ["esc", "clear marks"], ["→ l", "open inspector"], ["↑ k", "from first task, go to cards in Home"]];
   } else {
     title = `inspector · ${panel}`;
     bindings = [["u i o", "detail / links / history"], ["pgup pgdn", "previous / next task"], ["↑ ↓ j k", panel === "links" ? "select link" : "scroll"]];
@@ -25,12 +25,14 @@ export function helpBindings(panel: HelpPanel, width: number): { title: string; 
   }
   return [{ title, bindings }, { title: "everywhere", bindings: [
     ["← → h l", "move between panels"], ["/", "filter current view"],
-    ["d", "show or hide completed tasks"], ["a", "add a backlog source"],
+    ["d", "show or hide completed tasks"], ["a", "add a task"],
+    ["z", "undo the last action while its summary shows"],
     ["r", "refresh or reload detail"], ["L", "show, hide, or focus command output"], ["?", "open help"],
+    ["? / ctrl+g", "explain the action in an action dialog"],
     ["j k ↑ ↓ pgup pgdn", "scroll command output when focused"], ["esc", "close command output"],
     ["enter / e", "retry / edit a failed command when focused"],
     ["ctrl+s", "review multiline notes when editing"],
-    ["q", "quit when no dialog is open"], ["ctrl+c", "quit"],
+    ["q", "close the open dialog or panel, otherwise quit"], ["ctrl+c", "quit"],
   ] }];
 }
 
@@ -65,11 +67,11 @@ export function helpDimensions(panel: HelpPanel, terminalWidth: number, terminal
 export function footerHints(panel: HelpPanel, width: number, filtering: boolean): string[] {
   if (width < 105) return ["? help", "q quit"];
   if (filtering) return ["enter apply", "esc clear"];
-  if (width < 150) return [...(["detail", "links", "history"].includes(panel) ? ["u/i/o tabs"] : []), "/ filter", "d show done", "a add source", "r refresh", "? help", "q quit"];
+  if (width < 150) return [...(["detail", "links", "history"].includes(panel) ? ["u/i/o tabs"] : []), "/ filter", "d show done", "a add task", "r refresh", "? help", "q quit"];
   const panelHints: Record<HelpPanel, string[]> = {
     browse: ["j/k choose", "enter open", "h/l move"],
     cards: ["h/l choose", "j list", "enter open"],
-    list: ["j/k choose", "enter actions", "h/l move"],
+    list: ["j/k choose", "space mark", "enter actions", "h/l move"],
     detail: ["j/k scroll", "enter actions", "u/i/o tabs", "h back"],
     links: ["j/k choose", "enter actions", "u/i/o tabs", "h back"],
     history: ["j/k scroll", "u/i/o tabs", "h back"],

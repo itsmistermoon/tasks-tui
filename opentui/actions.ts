@@ -62,12 +62,11 @@ export function formatCommand(args: string[]): string {
 export async function runTasksAxi(args: string[], bin = "tasks-axi"): Promise<ActionResult> {
   let child;
   try {
-    child = Bun.spawn([bin, ...args], { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+    child = Bun.spawn(["sh", "-c", 'exec "$@" 2>&1', "tasks-axi", bin, ...args], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
   } catch (error) {
     return { ok: false, code: null, summary: String(error), output: String(error) };
   }
-  const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
-  const output = [stdout.trimEnd(), stderr.trimEnd()].filter(Boolean).join("\n") || `tasks-axi exited with code ${code}`;
+  const [output, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
   const first = output.split("\n")[0];
   return { ok: code === 0, code, summary: code === 0 ? first.replace(/^ok:\s*/, icons.Done + " ") : first, output };
 }

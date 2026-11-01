@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { commandArgs, formatCommand, runTasksAxi, taskActions } from "./actions";
@@ -48,4 +48,13 @@ test("runs tasks-axi and reports its result or its error unchanged", async () =>
   expect(failed).toMatchObject({ ok: false, code: 1 });
   expect(failed.output).toStartWith('error: "Task \\"missing\\" not found in this backlog"\ncode: NOT_FOUND');
   expect(await runTasksAxi(["start", "a1"], join(tmpdir(), "no-such-tasks-axi"))).toMatchObject({ ok: false });
+});
+
+test("preserves combined command output ordering and trailing text", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "tasks-tui-output-"));
+  const bin = join(dir, "tasks-axi");
+  await writeFile(bin, "#!/bin/sh\nprintf 'first\\n'\nprintf 'second\\n' >&2\nprintf 'tail  '\nexit 1\n");
+  await chmod(bin, 0o755);
+  const result = await runTasksAxi([], bin);
+  expect(result.output).toBe("first\nsecond\ntail  ");
 });

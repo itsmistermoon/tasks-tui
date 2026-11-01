@@ -1055,16 +1055,17 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
     const knownSources = new Set(data.sources);
     const taskOperations = new Set(["start", "done", "reopen", "hold", "unhold", "block", "unblock", "update", "rm"]);
     const affectedBySource = new Map<string, Set<string>>();
-    for (const args of commands) {
+    const completedCommands: string[][] = [];
+    const recordAffected = (args: string[]) => {
       const file = args.indexOf("--file");
       const source = file >= 0 ? args[file + 1] : undefined;
       const to = args.indexOf("--to");
       const ids = args[0] === "mv" && to > 0 ? args.slice(1, to) : taskOperations.has(args[0]) && args[1] ? [args[1]] : [];
-      if (!source || !ids.length) continue;
+      if (!source || !ids.length) return;
       const affected = affectedBySource.get(source) || new Set<string>();
       for (const id of ids) affected.add(id);
       affectedBySource.set(source, affected);
-    }
+    };
     const selected = data.tasks.find((t) => t.Key === navigation.selected);
     const subject = marked.size ? null : selected || navigation.opened;
     lastAction = { action, values, commands };
@@ -1079,6 +1080,8 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
       output += (output ? "\n" : "") + result.output.replace(/\n$/, "");
       if (!result.ok) break;
       done++;
+      completedCommands.push(args);
+      recordAffected(args);
     }
     actionRunning = false;
     const affectedCount = [...affectedBySource.values()].reduce((sum, ids) => sum + ids.size, 0);
@@ -1095,7 +1098,7 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
     // A created task is selected; tasks-axi prints its id, which may have been generated.
     const created = action.key === "a" && result.ok ? /^ok: added (\S+)/m.exec(output)?.[1] : undefined;
     const createdFile = created ? commands[0][commands[0].indexOf("--file") + 1] : "";
-    const movedIds = action.key === "m" && result.ok ? commands.flatMap((args) => {
+    const movedIds = action.key === "m" ? completedCommands.flatMap((args) => {
       const destination = args.indexOf("--to");
       return destination > 0 ? args.slice(1, destination) : [];
     }) : [];
@@ -1127,7 +1130,7 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
     }
     listTasks(target);
     revealSelected = !!target && visible.some((t) => t.Key === target.Key);
-    if (result.ok) notice = targets.filter((task) => !visible.some((item) => item.Key === task.Key));
+    notice = targets.filter((task) => !visible.some((item) => item.Key === task.Key));
     render();
   }
   // Brings tasks that left the view back: show done tasks, or switch to their new status.

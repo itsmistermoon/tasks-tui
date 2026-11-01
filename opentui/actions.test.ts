@@ -36,6 +36,14 @@ test("builds the tasks-axi command for the task's backlog", () => {
   );
 });
 
+test("unblock choices contain only nonempty trimmed blocker ids", () => {
+  const t = task({ id: "a", state: "in_flight", deps: "blocked-by:,blocked-by: b ,parent:c" });
+  const unblock = taskActions(t).find((action) => action.key === "u");
+  expect(unblock?.input?.initial).toBe("b");
+  expect(commandArgs(unblock!, t, unblock!.input!.initial)).toEqual(["unblock", "a", "--by", "b", "--file", "/one/backlog.md"]);
+  expect(taskActions(task({ id: "a", state: "in_flight", deps: "blocked-by:,parent:c" })).some((action) => action.key === "u")).toBe(false);
+});
+
 test("runs tasks-axi and reports its result or its error unchanged", async () => {
   const file = join(await mkdtemp(join(tmpdir(), "tasks-tui-actions-")), "backlog.md");
   expect((await runTasksAxi(["add", "a1", "Alpha", "--file", file])).ok).toBe(true);

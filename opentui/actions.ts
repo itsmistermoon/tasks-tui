@@ -21,7 +21,8 @@ export function blockers(task: Task): string[] {
   return String(task.Data.deps || "")
     .split(",")
     .filter((dep) => dep.startsWith("blocked-by:"))
-    .map((dep) => dep.slice("blocked-by:".length));
+    .map((dep) => dep.slice("blocked-by:".length).trim())
+    .filter(Boolean);
 }
 
 export function taskActions(task: Task): TaskAction[] {

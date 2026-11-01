@@ -1220,10 +1220,10 @@ renderer.keyInput.on("keypress", (key) => {
   }
   if (navigation.mode === "add" || navigation.mode === "input") {
     if (navigation.mode === "input" && actionChoice?.key === "n" && key.ctrl && key.sequence === "s") {
+      key.preventDefault();
       const editor = renderer.root.findDescendantById("notes-editor");
       if (editor instanceof TextareaRenderable) {
         actionValue = editor.plainText;
-        key.preventDefault();
         navigate({ type: "modal", modal: "confirm" });
         render();
       }

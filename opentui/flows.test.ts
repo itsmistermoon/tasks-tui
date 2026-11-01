@@ -95,6 +95,24 @@ test("a creates a task in the filtered backlog and selects it", async () => {
   await app.frame("✔ added write-the-docs");
 });
 
+test("adding a source loads its tasks into the current session", async () => {
+  const original = await backlog("alpha", ["add", "a1", "Alpha"]);
+  const added = await backlog("beta", ["add", "b2", "Bravo"]);
+  const app = await mount([original]);
+  await app.frame("home · recent activity");
+  for (let i = 0; i < 10; i++) await app.keys("j");
+  await app.keys("RETURN");
+  await app.frame("add source · sources");
+  await app.mockInput.typeText(added);
+  await app.keys("RETURN");
+  await app.frame("beta");
+  await app.keys("LEFT");
+  for (let i = 0; i < 10; i++) await app.keys("j");
+  await app.keys("RETURN");
+  const frame = await app.frame("b2 - Bravo");
+  expect(frame).toContain("beta");
+});
+
 test("a reversible action can be undone with z while its summary is shown", async () => {
   const file = await backlog("alpha", ["add", "a1", "Alpha"]);
   const app = await mount([file]);
@@ -145,6 +163,10 @@ test("a batch state change lists every task that leaves the view", async () => {
   const file = await backlog("alpha", ["add", "a1", "Alpha"], ["add", "b2", "Bravo"], ["add", "c3", "Charlie"]);
   const app = await mount([file]);
   await openList(app);
+  await app.keys("LEFT");
+  for (let i = 0; i < 5; i++) await app.keys("k");
+  await app.keys("RETURN");
+  await app.frame("a1 - Alpha");
   await app.keys(" ", " ", "RETURN", "d");
   await app.frame("mark done 2 tasks?");
   expect(await contents(file)).toContain("a1 - Alpha");
@@ -240,6 +262,7 @@ test("moving a task to a typed backlog preserves its identity for the view notic
   await app.keys(" ", " ", "RETURN", "m");
   await app.mockInput.typeText(other);
   await app.keys("RETURN", "y");
+  await app.frame("move to backlog · 2 tasks");
   await app.frame("a1, a2 left this view (d show · esc dismiss)");
   expect(await contents(other)).toContain("a1 - Alpha");
   expect(await contents(other)).toContain("a2 - Another");

@@ -1040,6 +1040,7 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
         const path = values.path.trim().replace(/^~(?=\/)/, homedir());
         settings.sources = [...new Set([...settings.sources, path])];
         await save();
+        snapshots.addSource(path);
         snapshots.setCacheFile(snapshotCachePath(cli.sources, settings.sources));
         navigate({ type: "focus", mode: "list" });
         focus = "list";
@@ -1079,7 +1080,8 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
       done++;
     }
     actionRunning = false;
-    const summary = commands.length > 1 && result.ok ? `${icons.Done} ${action.label} · ${commands.length} tasks` : result.summary;
+    const affectedCount = [...affectedBySource.values()].reduce((sum, ids) => sum + ids.size, 0);
+    const summary = affectedCount > 1 && result.ok ? `${icons.Done} ${action.label} · ${affectedCount} tasks` : result.summary;
     result = { ...result, summary, output };
     lastRun = { command: commands.slice(0, done + (result.ok ? 0 : 1)).map(formatCommand).join("\n"), result };
     lastAction = { action, values, commands: commands.slice(done) };
@@ -1143,6 +1145,11 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
       group = statuses.size === 1 ? `status:${status(tasks[0])}` : "status:All";
       query = "";
       searchText = "";
+      if (statuses.has("Done") && !showDone) {
+        showDone = true;
+        settings.showDone = true;
+        save();
+      }
     }
     listTasks(tasks[0]);
     navigate({ type: "select", task: tasks[0], mode: "list" });

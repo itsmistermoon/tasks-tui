@@ -4,29 +4,29 @@
 class TasksTui < Formula
   desc "Terminal viewer and manager for tasks-axi backlogs"
   homepage "https://github.com/itsmistermoon/tasks-tui"
-  version "0.3.1"
+  version "0.4.0"
 
   depends_on "bun"
   depends_on "node"
 
   on_macos do
     on_arm do
-      url "https://github.com/itsmistermoon/tasks-tui/releases/download/v0.3.1/tasks-tui-darwin-arm64.tar.gz"
-      sha256 "d39dca942019a4a70ceeec580794d199ab9abc2edeeca0b280b8b54bc65ec9b9"
+      url "https://github.com/itsmistermoon/tasks-tui/releases/download/v0.4.0/tasks-tui-darwin-arm64.tar.gz"
+      sha256 "ec202cfaea329e0d8d2c5effdc95f0c3e94a5b156e5d4a1d48de4723e6fa2116"
     end
     on_intel do
-      url "https://github.com/itsmistermoon/tasks-tui/releases/download/v0.3.1/tasks-tui-darwin-x64.tar.gz"
-      sha256 "1e53d7004c4fec4da5c7516725008cfb56e13ac0a31b877931cd95827dfb3158"
+      url "https://github.com/itsmistermoon/tasks-tui/releases/download/v0.4.0/tasks-tui-darwin-x64.tar.gz"
+      sha256 "c3db9ef86bc2b8d6ddf8f5a0cf5f0a33c35e021b5fc271e71756e406d27695af"
     end
   end
   on_linux do
     on_arm do
-      url "https://github.com/itsmistermoon/tasks-tui/releases/download/v0.3.1/tasks-tui-linux-arm64.tar.gz"
-      sha256 "19a485e8efb7f08ec2efe016d435fc8cf6dc27c9b582e217be95c46c2e5f3aaa"
+      url "https://github.com/itsmistermoon/tasks-tui/releases/download/v0.4.0/tasks-tui-linux-arm64.tar.gz"
+      sha256 "6c7ce3a5ea40cd22c397aa99a07bce43dbb20cb79e7fcaa07203dc2badfe764a"
     end
     on_intel do
-      url "https://github.com/itsmistermoon/tasks-tui/releases/download/v0.3.1/tasks-tui-linux-x64.tar.gz"
-      sha256 "14520757995e8b6354b970914439b369a991a9d71d9dc549a08057d89ff28eec"
+      url "https://github.com/itsmistermoon/tasks-tui/releases/download/v0.4.0/tasks-tui-linux-x64.tar.gz"
+      sha256 "0e20df69a5c02de58486bdbb89b778aa6847e5d97b29f39905b0612b2e62b60b"
     end
   end
 

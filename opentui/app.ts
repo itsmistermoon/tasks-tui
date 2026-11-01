@@ -154,6 +154,7 @@ let actionTask: Task | null = null,
   lastRun: { command: string; result: ActionResult } | null = null,
   logOpen = false,
   logFocused = false,
+  commandMaxScroll = 0,
   commandScrollTop = 0;
 let helpPanel: HelpPanel = "browse";
 const text = (
@@ -422,7 +423,14 @@ function render(underlay = false) {
   });
   if (focus === "search") input.focus();
   const renderFooter = () => {
-    if (logOpen && lastRun) frame.add(commandLog(lastRun));
+    if (logOpen && lastRun) {
+      frame.add(commandLog(lastRun));
+      if (logFocused)
+        for (const id of ["panel", "list-panel", "nav"]) {
+          const panel = renderer.root.findDescendantById(id);
+          if (panel instanceof BoxRenderable) panel.borderColor = inactiveBorder;
+        }
+    }
     const footer = box("footer-row", { flexDirection: "row", width: "100%", height: 1, flexShrink: 0 });
     frame.add(footer);
     const location = box("status-bar", { flexDirection: "row", flexGrow: 1, flexBasis: 0, height: 1, paddingLeft: 1 });
@@ -1014,27 +1022,43 @@ async function readSnapshot() {
     if (focus !== "search") render();
   }
 }
+// Moving down past the end of the focused panel enters the command panel below it.
+function atPanelBottom(): boolean {
+  if (navigation.cardsFocused) return false;
+  if (navigation.mode === "list") return visible.findIndex((t) => t.Key === navigation.selected) >= visible.length - 1;
+  if (navigation.mode === "browse") return navIndex >= navItems.length - 1;
+  if (navigation.mode === "links") return linkIndex >= linkEntries().length - 1;
+  if (isInspectorTab(navigation.mode)) return !scroll || scroll.scrollTop >= scroll.scrollHeight - scroll.viewport.height;
+  return false;
+}
 function commandLog(run: { command: string; result: ActionResult }) {
   const { result } = run;
   const lines = result.output.split("\n");
   const rows = (value: string) => Math.max(1, Math.ceil(Bun.stringWidth(value) / Math.max(1, renderer.width - 4)));
-  const height = Math.max(5, Math.min(rows(run.command + " · exit 000") + lines.reduce((sum, row) => sum + rows(row), 0) + 4, Math.floor(renderer.height / 2)));
-  const panel = box("command-log", { border: true, borderStyle: "rounded", borderColor: logFocused ? activeBorder : result.ok ? inactiveBorder : RGBA.fromIndex(9), paddingLeft: 1, paddingRight: 1, height, flexShrink: 0 });
+  // The command is part of the scrolled content so a long command cannot overflow the panel.
+  const contentRows = rows(run.command + " · exit 000") + lines.reduce((sum, row) => sum + rows(row), 0);
+  const height = Math.max(5, Math.min(contentRows + 3, Math.floor(renderer.height / 2)));
+  commandMaxScroll = Math.max(0, contentRows - (height - 3));
+  commandScrollTop = Math.min(commandScrollTop, commandMaxScroll);
+  const panel = box("command-log", { border: true, borderStyle: "rounded", borderColor: logFocused ? activeBorder : result.ok ? inactiveBorder : RGBA.fromIndex(9), paddingLeft: 1, paddingRight: 1, height, flexShrink: 0, overflow: "hidden" });
   const header = text("command-log-title", new StyledText([
     fg(result.ok ? colors.Done : RGBA.fromIndex(9))(result.ok ? icons.Done + " " : "✗ "),
     fg("#e0e0e4")(run.command),
     fg("#858796")(` · exit ${result.code ?? "-"}`),
   ]), RGBA.defaultForeground(), { width: "100%", wrapMode: "char", flexShrink: 0 });
   header.attributes = 1;
-  panel.add(header);
   // Colour tasks-axi's own lines without changing their text.
   const shade = (row: string) => /^(ok:|error:)/.test(row) ? (result.ok ? colors.Done : RGBA.fromIndex(9)) : /^code:/.test(row) ? "#858796" : /^help\[/.test(row) ? activeBorder : "#d8d8de";
-  const body = new ScrollBoxRenderable(renderer, { id: "command-log-body", flexGrow: 1, overflow: "hidden", scrollbarOptions });
+  const body = hideScrollbars(new ScrollBoxRenderable(renderer, { id: "command-log-body", flexGrow: 1, flexShrink: 1, overflow: "hidden", scrollbarOptions }));
+  body.add(header);
   lines.forEach((row, i) => body.add(text("command-log-line-" + i, row, shade(row), { width: "100%", wrapMode: "char" })));
-  body.scrollTop = commandScrollTop;
+  // Apply the offset once the content has been laid out; before that the scroll range is empty.
+  const offset = commandScrollTop;
+  setTimeout(() => {
+    if (!body.isDestroyed) body.scrollTop = offset;
+  }, 0);
   panel.add(body);
-  const bodyRows = lines.reduce((sum, row) => sum + rows(row), 0);
-  const canScroll = bodyRows > height - 4;
+  const canScroll = commandMaxScroll > 0;
   panel.add(keybindBar("command-log-hint", [...(canScroll ? ["j/k scroll"] : []), ...(!result.ok && logFocused && actionChoice?.input ? ["e edit"] : []), ...(!result.ok && logFocused ? ["↵ retry"] : []), "esc close"], { paddingRight: 0, justifyContent: "flex-start" }));
   return panel;
 }
@@ -1229,12 +1253,12 @@ renderer.keyInput.on("keypress", (key) => {
       return;
     }
     if (logFocused && (key.name === "down" || key.name === "j")) {
-      commandScrollTop++;
+      commandScrollTop = Math.min(commandMaxScroll, commandScrollTop + 1);
       render();
       return;
     }
     if (logFocused && key.name === "pageup") { commandScrollTop = Math.max(0, commandScrollTop - 10); render(); return; }
-    if (logFocused && key.name === "pagedown") { commandScrollTop += 10; render(); return; }
+    if (logFocused && key.name === "pagedown") { commandScrollTop = Math.min(commandMaxScroll, commandScrollTop + 10); render(); return; }
     if (logFocused && !lastRun.result.ok && key.name === "return") {
       runAction();
       return;
@@ -1243,6 +1267,11 @@ renderer.keyInput.on("keypress", (key) => {
       key.preventDefault();
       logOpen = false;
       navigate({ type: "modal", modal: "input" });
+      render();
+      return;
+    }
+    if (!logFocused && (key.name === "down" || key.name === "j") && atPanelBottom()) {
+      logFocused = true;
       render();
       return;
     }

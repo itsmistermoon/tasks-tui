@@ -1030,7 +1030,7 @@ function commandLog(run: { command: string; result: ActionResult }) {
   const body = box("command-log-body", { flexGrow: 1, overflow: "hidden" });
   lines.forEach((row, i) => body.add(text("command-log-line-" + i, row, shade(row), { width: "100%", wrapMode: "char" })));
   panel.add(body);
-  panel.add(keybindBar("command-log-hint", [...(!result.ok && actionChoice?.input ? ["e edit"] : []), ...(!result.ok ? ["r retry"] : []), "esc close"], { paddingRight: 0, justifyContent: "flex-start" }));
+  panel.add(keybindBar("command-log-hint", [...(!result.ok && actionChoice?.input ? ["e edit"] : []), ...(!result.ok ? ["↵ retry"] : []), "esc close"], { paddingRight: 0, justifyContent: "flex-start" }));
   return panel;
 }
 function openActions(task: Task) {
@@ -1210,7 +1210,7 @@ renderer.keyInput.on("keypress", (key) => {
       render();
       return;
     }
-    if (!lastRun.result.ok && key.sequence === "r") {
+    if (!lastRun.result.ok && key.name === "return") {
       runAction();
       return;
     }

@@ -214,6 +214,22 @@ test("a task moved out of the view leaves a notice that d follows", async () => 
   expect(await app.frame("✔ done")).toContain("Alpha");
 });
 
+test("moving a task across backlogs preserves its identity for the view notice", async () => {
+  const file = await backlog("alpha", ["add", "a1", "Alpha"]);
+  const other = await backlog("beta", ["add", "b2", "Bravo"]);
+  const app = await mount([file, other]);
+  await openList(app);
+  await app.keys("LEFT", "j", "RETURN");
+  await app.frame("alpha ·");
+  await app.keys("RETURN", "m");
+  await app.frame("beta ·");
+  await app.keys("RETURN", "y");
+  await app.frame("a1 left this view (d show · esc dismiss)");
+  expect(await contents(other)).toContain("a1 - Alpha");
+  await app.keys("d");
+  expect(await app.frame("Alpha")).toContain("alpha");
+});
+
 test("search matches task values, not field names", async () => {
   const file = await backlog("alpha", ["add", "a1", "Alpha"], ["add", "b2", "Bravo state"]);
   const app = await mount([file]);

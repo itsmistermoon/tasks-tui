@@ -1079,13 +1079,21 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
     // A created task is selected; tasks-axi prints its id, which may have been generated.
     const created = action.key === "a" && result.ok ? /^ok: added (\S+)/m.exec(output)?.[1] : undefined;
     const createdFile = created ? commands[0][commands[0].indexOf("--file") + 1] : "";
+    const movedIds = action.key === "m" && result.ok ? commands.flatMap((args) => {
+      const destination = args.indexOf("--to");
+      return destination > 0 ? args.slice(1, destination) : [];
+    }) : [];
     // Read after the write even if a refresh started before it.
     await refreshing;
     actedKey = subject?.Key || "";
     await refresh();
     actedKey = "";
     if (renderer.isDestroyed) return;
-    const target = created ? data.tasks.find((t) => t.Source === createdFile && String(t.Data.id) === created && !t.Archived) : subject ? data.tasks.find((t) => t.Key === subject.Key) : undefined;
+    const target = created
+      ? data.tasks.find((t) => t.Source === createdFile && String(t.Data.id) === created && !t.Archived)
+      : movedIds.length
+        ? data.tasks.find((t) => t.Source === values.to && movedIds.includes(String(t.Data.id)) && !t.Archived)
+        : subject ? data.tasks.find((t) => t.Key === subject.Key) : undefined;
     if (created && target) {
       navigate({ type: "select", task: target, mode: "list" });
     } else if (subject && navigation.opened?.Key === subject.Key) {

@@ -107,7 +107,8 @@ Each action runs `tasks-axi <command> --file <backlog>` against the task's own b
 | `j` / `k`, arrows, Page Up / Page Down | Scroll command output when its panel is focused |
 | `Esc` | Close a dialog (`q` also closes the actions menu and confirmations), clear the filter, or return from status cards |
 | `?` | Open help |
-| `q` / `Ctrl+C` | Quit |
+| `q` | Close the actions menu or command output; otherwise quit |
+| `Ctrl+C` | Quit |
 
 The interface adapts to the terminal width: the sidebar and inspector use separate panels when space allows.
 

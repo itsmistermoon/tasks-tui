@@ -143,8 +143,7 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
   let flow: Flow | null = null,
     // Tasks marked with space; the action menu then applies to all of them.
     marked = new Set<string>(),
-    // Persistent notice for a task that its own action moved out of the current view.
-    notice: Task | null = null,
+    notice: Task[] = [],
     // The last action run, kept for retry and edit after a failure.
     lastAction: { action: TaskAction; values: Values; commands: string[][] } | null = null,
     undo: string[][] | null = null,
@@ -367,8 +366,9 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
         result.flexShrink = 1;
         location.add(result);
       }
-      if (notice && focus !== "search") {
-        const hidden = line("notice", `  ${notice.Data.id} left this view (d show · esc dismiss)`, "#e8bb65");
+      if (notice.length && focus !== "search") {
+        const ids = notice.map((task) => String(task.Data.id)).join(", ");
+        const hidden = line("notice", `  ${ids} left this view (d show · esc dismiss)`, "#e8bb65");
         hidden.flexShrink = 1;
         location.add(hidden);
       }
@@ -384,7 +384,7 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
       const panel: HelpPanel = navigation.cardsFocused ? "cards" : viewingMode as HelpPanel;
       if (updatedAt) footer.add(text("updated-at", `updated ${updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}  `, RGBA.defaultForeground(), { height: 1, flexShrink: 0 }));
       // A notice takes the room of the key hints, which stay available with ?.
-      footer.add(keybindBar("footer", footerHints(panel, notice ? 0 : renderer.width, focus === "search"), { width: "auto", flexShrink: 0 }));
+      footer.add(keybindBar("footer", footerHints(panel, notice.length ? 0 : renderer.width, focus === "search"), { width: "auto", flexShrink: 0 }));
     };
     const area = box("area", { flexDirection: "row", flexGrow: 1 });
     frame.add(area);
@@ -1051,11 +1051,23 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
   async function runAction(action: TaskAction, values: Values, commands = action.commands(values)) {
     if (actionRunning) return;
     const knownSources = new Set(data.sources);
+    const taskOperations = new Set(["start", "done", "reopen", "hold", "unhold", "block", "unblock", "update", "rm"]);
+    const affectedBySource = new Map<string, Set<string>>();
+    for (const args of commands) {
+      const file = args.indexOf("--file");
+      const source = file >= 0 ? args[file + 1] : undefined;
+      const to = args.indexOf("--to");
+      const ids = args[0] === "mv" && to > 0 ? args.slice(1, to) : taskOperations.has(args[0]) && args[1] ? [args[1]] : [];
+      if (!source || !ids.length) continue;
+      const affected = affectedBySource.get(source) || new Set<string>();
+      for (const id of ids) affected.add(id);
+      affectedBySource.set(source, affected);
+    }
     const selected = data.tasks.find((t) => t.Key === navigation.selected);
     const subject = marked.size ? null : selected || navigation.opened;
     lastAction = { action, values, commands };
     actionRunning = true;
-    notice = null;
+    notice = [];
     render();
     // Commands run in order and stop at the first failure; retry resumes from the failed one.
     let output = "", result: ActionResult = { ok: true, code: 0, summary: "", output: "" };
@@ -1094,11 +1106,15 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
     await refresh();
     actedKey = "";
     if (renderer.isDestroyed) return;
-    const target = created
-      ? data.tasks.find((t) => t.Source === createdFile && String(t.Data.id) === created && !t.Archived)
-      : movedIds.length
-        ? data.tasks.find((t) => (resolve(t.Source) === resolve(String(values.to)) || !knownSources.has(t.Source)) && movedIds.includes(String(t.Data.id)) && !t.Archived)
-        : subject ? data.tasks.find((t) => t.Key === subject.Key) : undefined;
+    const targets = created
+      ? [data.tasks.find((t) => t.Source === createdFile && String(t.Data.id) === created && !t.Archived)].filter((task): task is Task => !!task)
+      : [...affectedBySource].flatMap(([source, ids]) => [...ids].flatMap((id) => {
+        const task = movedIds.length
+          ? data.tasks.find((item) => (resolve(item.Source) === resolve(String(values.to)) || !knownSources.has(item.Source)) && String(item.Data.id) === id && !item.Archived)
+          : data.tasks.find((item) => item.Source === source && String(item.Data.id) === id && !item.Archived);
+        return task ? [task] : [];
+      }));
+    const target = targets[0] || (subject ? data.tasks.find((t) => t.Key === subject.Key) : undefined);
     if (created && target) {
       navigate({ type: "select", task: target, mode: "list" });
     } else if (subject && navigation.opened?.Key === subject.Key) {
@@ -1108,27 +1124,28 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
     }
     listTasks(target);
     revealSelected = !!target && visible.some((t) => t.Key === target.Key);
-    if (result.ok && target && !visible.some((t) => t.Key === target.Key)) notice = target;
+    if (result.ok) notice = targets.filter((task) => !visible.some((item) => item.Key === task.Key));
     render();
   }
-  // Brings a task that left the view back: show done tasks, or switch to its new status.
+  // Brings tasks that left the view back: show done tasks, or switch to their new status.
   function revealNotice() {
-    const task = notice;
-    notice = null;
-    if (!task) return;
+    const tasks = notice;
+    notice = [];
+    if (!tasks.length) return;
     const withDone = projectView(data.tasks, data.sources, { query, source, group, showDone: true }).tasks;
-    if (!showDone && withDone.some((t) => t.Key === task.Key)) {
+    const statuses = new Set(tasks.map(status));
+    if (!showDone && tasks.every((task) => withDone.some((item) => item.Key === task.Key))) {
       showDone = true;
       settings.showDone = true;
       save();
     } else {
       source = "";
-      group = `status:${status(task)}`;
+      group = statuses.size === 1 ? `status:${status(tasks[0])}` : "status:All";
       query = "";
       searchText = "";
     }
-    listTasks(task);
-    navigate({ type: "select", task, mode: "list" });
+    listTasks(tasks[0]);
+    navigate({ type: "select", task: tasks[0], mode: "list" });
     revealSelected = true;
     render();
   }
@@ -1284,8 +1301,8 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
       runAction({ key: "z", label: "undo", explain: "", confirm: false, fields: [], commands: () => commands }, {});
       return;
     }
-    if (notice && key.name === "escape") { notice = null; render(); return; }
-    if (notice && key.sequence === "d") { revealNotice(); return; }
+      if (notice.length && key.name === "escape") { notice = []; render(); return; }
+    if (notice.length && key.sequence === "d") { revealNotice(); return; }
     if (actionResult) {
       actionResult = null;
       undo = null;

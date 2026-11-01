@@ -141,6 +141,21 @@ test("a confirmation runs only after y and n cancels it", async () => {
   await until(app, async () => !(await contents(file)).includes("a1 - Alpha"));
 });
 
+test("a batch state change lists every task that leaves the view", async () => {
+  const file = await backlog("alpha", ["add", "a1", "Alpha"], ["add", "b2", "Bravo"], ["add", "c3", "Charlie"]);
+  const app = await mount([file]);
+  await openList(app);
+  await app.keys(" ", " ", "RETURN", "d");
+  await app.frame("mark done 2 tasks?");
+  expect(await contents(file)).toContain("a1 - Alpha");
+  expect(await contents(file)).toContain("b2 - Bravo");
+  await app.keys("y");
+  await app.frame("a1, b2 left this view (d show · esc dismiss)");
+  await app.keys("d");
+  const frame = await app.frame("a1 - Alpha");
+  expect(frame).toContain("b2 - Bravo");
+});
+
 test("a failed command opens its output, and e edits the value before Enter retries", async () => {
   const file = await backlog("alpha", ["add", "a1", "Alpha"]);
   const app = await mount([file]);
@@ -215,20 +230,22 @@ test("a task moved out of the view leaves a notice that d follows", async () => 
 });
 
 test("moving a task to a typed backlog preserves its identity for the view notice", async () => {
-  const file = await backlog("alpha", ["add", "a1", "Alpha"]);
+  const file = await backlog("alpha", ["add", "a1", "Alpha"], ["add", "a2", "Another"]);
   const other = join(dirname(dirname(file)), "manual", "backlog.md");
   await mkdir(dirname(other), { recursive: true });
   const app = await mount([file]);
   await openList(app);
   await app.keys("LEFT", "j", "RETURN");
   await app.frame("alpha ·");
-  await app.keys("RETURN", "m");
+  await app.keys(" ", " ", "RETURN", "m");
   await app.mockInput.typeText(other);
   await app.keys("RETURN", "y");
-  await app.frame("a1 left this view (d show · esc dismiss)");
+  await app.frame("a1, a2 left this view (d show · esc dismiss)");
   expect(await contents(other)).toContain("a1 - Alpha");
+  expect(await contents(other)).toContain("a2 - Another");
   await app.keys("d");
-  const frame = await app.frame("Alpha");
+  const frame = await app.frame("a1 - Alpha");
+  expect(frame).toContain("a2 - Another");
   expect(frame).toContain("manual");
 });
 

@@ -53,6 +53,13 @@ test("done with link undo restores queued tasks without removing their links", (
   expect(action.commands({ pr: "https://example.test/pr/1" })).toEqual([["done", "a", "--pr", "https://example.test/pr/1", "--no-prune", "--file", "/one/backlog.md"]]);
 });
 
+test("done with link has no undo when the task was already done", () => {
+  const t = task({ id: "a", state: "done" });
+  const action = taskActions([t], context([t])).find((item) => item.key === "l")!;
+  expect(action.inverse!({ pr: "https://example.test/pr/1" })).toEqual([]);
+  expect(action.commands({ pr: "https://example.test/pr/1" })).toEqual([["done", "a", "--pr", "https://example.test/pr/1", "--no-prune", "--file", "/one/backlog.md"]]);
+});
+
 test("pickers offer tasks of the same backlog and the current blockers", () => {
   const a = task({ id: "a", deps: "blocked-by:b" }), b = task({ id: "b" }), c = task({ id: "c" }), other = task({ id: "x" }, false, "/two/backlog.md");
   const actions = taskActions([a], context([a, b, c, other]));

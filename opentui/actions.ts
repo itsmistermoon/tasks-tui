@@ -107,7 +107,7 @@ const specs: Spec[] = [
       { name: "note", label: "closing note (optional):", type: "text", optional: true },
     ],
     args: (task, values) => ["done", id(task), ...optional("--pr", values.pr), ...optional("--report", values.report), ...optional("--note", values.note), "--no-prune"],
-    inverse: (task) => [["reopen", id(task)], ...(task.Data.state === "in_flight" ? [["start", id(task)]] : [])],
+    inverse: (task) => task.Data.state === "done" ? [] : [["reopen", id(task)], ...(task.Data.state === "in_flight" ? [["start", id(task)]] : [])],
   },
   {
     key: "r", label: "reopen", bulk: true, applies: (task) => open(task) && task.Data.state !== "queued",

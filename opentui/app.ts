@@ -1089,7 +1089,8 @@ export async function mountApp({ renderer, args, settingsFile, backend, tasksAxi
     result = { ...result, summary, output };
     lastRun = { command: commands.slice(0, done + (result.ok ? 0 : 1)).map(formatCommand).join("\n"), result };
     lastAction = { action, values, commands: commands.slice(done) };
-    undo = result.ok && action.inverse ? action.inverse(values) : null;
+    const inverse = result.ok && action.inverse ? action.inverse(values) : [];
+    undo = inverse.length ? inverse : null;
     // Successes stay in the status bar; failures open the command log with tasks-axi's guidance.
     actionResult = result.ok ? result : null;
     if (result.ok) { logOpen = false; logFocused = false; if (commands.length > 1 || marked.size) marked = new Set(); }

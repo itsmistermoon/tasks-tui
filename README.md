@@ -68,25 +68,49 @@ Select a task and move right (`→` or `l`) to open the inspector. On a wide ter
 
 ## Change a task
 
-Select a task in the list or inspector and press `Enter` to open its actions. Move with `j` / `k` and press `Enter`, or press the key shown beside an action. `Esc` closes the menu.
+Select a task in the list or inspector and press `Enter` to open its actions. Move with `j` / `k` and press `Enter`, or press the key shown beside an action. Press `?` to read what the highlighted action does and its consequences. `Esc` or `q` closes the menu.
 
 | Key | Action | `tasks-axi` command | Confirmation |
 | --- | --- | --- | --- |
 | `s` | Start a queued task | `start <id>` | No |
 | `d` | Mark done, without archiving older done tasks | `done <id> --no-prune` | No |
+| `l` | Done with link: record a pull request, report path, or closing note | `done <id> --pr <url> --report <path> --note <text> --no-prune` | No |
 | `r` | Reopen a done or in-flight task | `reopen <id>` | No |
-| `h` | Hold with a reason, or remove the hold | `hold <id> --reason <text>` / `unhold <id>` | No |
-| `b` | Block by another task | `block <id> --by <other>` | No |
-| `u` | Remove a blocking task | `unblock <id> --by <other>` | No |
+| `h` | Hold with a reason and an optional end date, or remove the hold | `hold <id> --reason <text> --until <date>` / `unhold <id>` | No |
+| `b` | Block by another task of the same backlog, chosen from a list | `block <id> --by <other>` | No |
+| `u` | Remove one of the current blocking tasks | `unblock <id> --by <other>` | No |
+| `p` | Set the priority with `0`–`4` | `update <id> --priority <n>` | No |
 | `t` | Edit the title | `update <id> --title <text>` | Yes |
 | `n` | Replace the notes, archiving the previous notes | `update <id> --body <text> --archive-body` | Yes |
-| `m` | Move to another backlog | `mv <id> --to <path>` | Yes |
-| `P` | Prune: move all but the most recent done tasks in the backlog to the archive | `prune --keep <n> --state done` | Yes |
+| `m` | Move to a known backlog, or a typed path, with its connected tasks | `mv <id>... --to <path>` | Yes |
 | `D` | Delete the task | `rm <id>` | Yes |
 
-The menu lists only the actions that apply to the task's current state; archived tasks have none. Actions that need a value, such as a hold reason, ask for it first. Replace notes opens a multiline editor with the current notes; press `Enter` to add a line, `Ctrl+S` to review the exact command, or `Esc` to cancel. Actions that cannot be undone, or that affect several tasks, open a dialog that asks the question (for example "delete task a1?"), warns what will be lost or affected, names the affected backlog, and shows the exact command; press `y` to run it or `n` to cancel. Any other key leaves the dialog open. There is no setting or shortcut that skips this confirmation.
+The menu lists only the actions that apply to the task's current state; archived tasks have none. Actions that need values ask for them in order; optional values can be left blank. Blocking tasks and destination backlogs are chosen from a list that narrows as you type, and a move also accepts a typed path. When a task to move is linked by `blocked-by` to other tasks in its backlog, the confirmation lists the whole connected group and moves it in one `tasks-axi mv`, so no link is stranded. In an empty editable field, press `?` for the action's explanation; once the field has text, `?` is entered as a character. `Esc` closes the explanation and returns to the field, or cancels the form. Replace notes opens a multiline editor with the current notes; press `Enter` to add a line and `Ctrl+S` to review the exact command.
 
-Each action runs `tasks-axi <command> --file <backlog>` against the task's own backlog, so locking, formatting, and validation remain the responsibility of `tasks-axi`; its exit code decides whether the action succeeded. A successful action shows the first line of the `tasks-axi` output as a `✔` summary in the status bar next to the breadcrumb; the next key press dismisses it. A failed action opens a command panel below the task panels with the command, its exit code, and the `tasks-axi` output exactly as it was printed, including its suggested next steps. The panel takes focus when it opens. Use `j`/`k`, arrows, or Page Up/Page Down to scroll; when at the top, another `k`/up returns focus to the task panels while keeping the output visible. `L` shows or hides the last output, or focuses it when visible without focus. With the panel focused, `e` edits the value you entered and `Enter` retries a failed command. `Esc` closes it. To the left of the key hints, `updated HH:MM` shows when the view last took in a change, including the result of each action. The view then reloads and keeps the task selected, even when the change moves it out of the current list, for example when done tasks are hidden. A deleted or moved task is no longer selected.
+Actions that cannot be undone, or that affect several tasks, open a dialog that asks the question (for example "delete task a1?"), warns what will be lost or affected, names the affected backlog and tasks, and shows every exact command; press `y` to run it or `n` to cancel. Any other key leaves the dialog open. There is no setting or shortcut that skips this confirmation.
+
+After a single-task start, mark done, done with link, reopen, hold, remove hold, block, or unblock, the summary in the status bar offers `z undo`, which runs the opposite command while the summary is visible. Undoing done with link reopens the task; recorded links remain. On a task that was already done, done with link only adds links and offers no undo. Batch actions are confirmed and cannot be undone. Undo is not offered after edits, moves, deletes, or backlog actions.
+
+### Several tasks
+
+Press `Space` in the task list to mark or unmark a task; `Esc` clears the marks. With tasks marked, `Enter` opens one menu with only the actions that apply to all of them: start, mark done, reopen, hold, remove hold, set priority, move, and delete. The confirmation lists the marked tasks and every command; a move runs one `tasks-axi mv` per source backlog.
+
+### Create tasks and change a backlog
+
+Press `a` to add a task. Enter the title, then an id or leave it blank to generate one from the title (`--mint`), choose whether it starts queued or in flight, and optionally a kind, repository, and priority. It goes to the backlog of the current filter; in "all backlogs" you choose the backlog from a list. The new task is selected after it is created.
+
+In Browse, press `Enter` on a backlog to open its menu:
+
+| Key | Action | `tasks-axi` command | Confirmation |
+| --- | --- | --- | --- |
+| `v` | Show the backlog's tasks | — | No |
+| `a` | Add a task to this backlog | `add ...` | No |
+| `P` | Prune: move all but the most recent done tasks to the archive | `prune --keep <n> --state done` | Yes |
+| `R` | Render: rewrite the backlog in canonical form | `render` | Yes |
+
+`+ add source` at the end of the sources in Browse adds another backlog file or directory.
+
+Each action runs `tasks-axi <command> --file <backlog>` against the task's own backlog (one command per task when several are marked, stopping at the first failure), so locking, formatting, and validation remain the responsibility of `tasks-axi`; its exit code decides whether the action succeeded. A successful action shows the first line of the `tasks-axi` output as a `✔` summary in the status bar next to the breadcrumb; the next key press dismisses it. A failed action opens a command panel below the task panels with the command, its exit code, and the `tasks-axi` output exactly as it was printed, including its suggested next steps. The panel takes focus when it opens. Use `j`/`k`, arrows, or Page Up/Page Down to scroll; when at the top, another `k`/up returns focus to the task panels while keeping the output visible. `L` shows or hides the last output, or focuses it when visible without focus. With the panel focused, `e` edits the values you entered and `Enter` retries a failed command from where it stopped. `Esc` or `q` closes it. To the left of the key hints, `updated HH:MM` shows when the view last took in a change, including the result of each action. The view then reloads and keeps the task selected. When the change moves it out of the current list, for example when done tasks are hidden, the status bar shows `(d show · esc dismiss)`: `d` shows the hidden tasks, or switches to the task's new status, and keeps it selected. This notice stays until you dismiss or follow it. A deleted task is no longer selected.
 
 ## Keyboard
 
@@ -96,27 +120,29 @@ Each action runs `tasks-axi <command> --file <backlog>` against the task's own b
 | `←` / `→` or `h` / `l` | Move between panels and status cards |
 | `Home` / `End` | Go to the first or last item |
 | `Page Up` / `Page Down` | Move by page in a list; change task in the inspector or detail view |
-| `Enter` | Choose a browse option or status card, or open the actions for the selected task |
+| `Enter` | Choose a browse option or status card, open a backlog's menu, or open the actions for the selected or marked tasks |
 | `u` / `i` / `o` | Select details, links, or note history when the inspector is focused |
 | `e` | Toggle inspector expansion on smaller terminals |
 | `/` | Filter the current view |
 | `d` | Show or hide completed and archived tasks |
-| `a` | Add a backlog file or directory |
+| `a` | Add a task |
+| `Space` | Mark or unmark the selected task |
+| `z` | Undo the last reversible action while its summary is shown |
 | `r` | Refresh sources or reload changed task details |
 | `L` | Show, hide, or focus the output of the last task action |
 | `j` / `k`, arrows, Page Up / Page Down | Scroll command output when its panel is focused |
-| `Esc` | Close a dialog, clear the filter, or return from status cards |
-| `?` | Open help |
-| `q` | Quit when no dialog is open |
+| `Esc` | Close a dialog or cancel a form, clear the filter or marks, dismiss a notice, or return from status cards |
+| `?` | Open help, or explain the action in an action dialog |
+| `q` | Close an action menu, confirmation, or command panel, otherwise quit |
 | `Ctrl+C` | Quit |
 
 The interface adapts to the terminal width: the sidebar and inspector use separate panels when space allows.
 
 ## Sources and updates
 
-The viewer discovers backlogs in the current project and within `~/.treehouse`, `~/.fm`, and `~/projects`, with a bounded search depth. Pass paths on the command line or press `a` to add another source. A directory can contain a `backlog.md`, a `data/backlog.md`, or a `.tasks.toml` pointing to its backlog.
+The viewer discovers backlogs in the current project and within `~/.treehouse`, `~/.fm`, and `~/projects`, with a bounded search depth. Pass paths on the command line or choose `+ add source` in Browse to add another source. A directory can contain a `backlog.md`, a `data/backlog.md`, or a `.tasks.toml` pointing to its backlog. Each backlog is shown by the name of its project folder; when two projects share a name, their parent folder is added.
 
-The sidebar filters by source, status, task type, or repository. Filtering scans task data within the selected view. Outside Home, completed and archived tasks are hidden by default; press `d` to include them or choose their status in Browse.
+The sidebar filters by source, status, task type, or repository. Filtering matches the title, id, notes, repository, kind, and hold reason of the tasks in the selected view. Outside Home, completed and archived tasks are hidden by default; press `d` to include them or choose their status in Browse.
 
 The viewer can show a cached snapshot at startup while it refreshes sources in the background. The view checks for changes every two seconds. An open task keeps its current contents while indicating changed fields; press `r` to reload it. If a known source becomes inaccessible, its last snapshot stays visible and the interface reports `STALE`.
 
@@ -143,9 +169,11 @@ go build -o bin/tasks-backend .
 go test ./...
 go vet ./...
 
-# Frontend checks
+# Frontend checks, including the keyboard flow tests
 (cd opentui && bun test)
 ```
+
+The flow tests in `opentui/flows.test.ts` mount the whole app in OpenTUI's test renderer with temporary backlogs, an isolated `HOME`, and the installed `tasks-axi`, then press keys and check the screen and the backlog files. They need `bin/tasks-backend` built and `tasks-axi` on `PATH`. The CI workflow runs all of these checks on every pull request and fails if any of them fails; run them locally before opening one.
 
 Design decisions, such as how panels scroll, are recorded in `docs/adr/`. The OpenTUI frontend lives in `opentui/`. The Go backend discovers sources, reads snapshots, serves archived note history, and provides task counts.
 

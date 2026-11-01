@@ -152,10 +152,10 @@ test('restoring a rebuilt list reveals the task selected in the inspector', asyn
 
 test('chained action dialogs return to the panel that opened them', async () => {
   const { transitionNavigation } = await import('./navigation')
-  let state = transitionNavigation({ selected: '', opened: null, inspectorMode: 'detail', inspecting: false, expanded: false, mode: 'detail', modalReturnMode: 'list', cardsFocused: false, cardIndex: 0 }, { type: 'modal', modal: 'actions' })
-  state = transitionNavigation(state, { type: 'modal', modal: 'input' })
-  state = transitionNavigation(state, { type: 'modal', modal: 'confirm' })
-  expect(state.mode).toBe('confirm')
+  let state = transitionNavigation({ selected: '', opened: null, inspectorMode: 'detail', inspecting: false, expanded: false, mode: 'detail', modalReturnMode: 'list', cardsFocused: false, cardIndex: 0 }, { type: 'modal', modal: 'action' })
+  state = transitionNavigation(state, { type: 'modal', modal: 'action' })
+  state = transitionNavigation(state, { type: 'modal', modal: 'help' })
+  expect(state.mode).toBe('help')
   expect(transitionNavigation(state, { type: 'dismiss' }).mode).toBe('detail')
 })
 

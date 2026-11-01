@@ -28,6 +28,12 @@ export class SnapshotClient {
     this.cacheFile = cacheFile;
   }
 
+  addSource(source: string): void {
+    if (this.sources.includes(source)) return;
+    this.sources = [...this.sources, source];
+    this.close();
+  }
+
   async readCached(): Promise<Snapshot | null> {
     try {
       const cached = JSON.parse(await readFile(this.cacheFile, "utf8"));
@@ -44,6 +50,8 @@ export class SnapshotClient {
         stdin: "pipe",
         stdout: "pipe",
         stderr: "ignore",
+        // Bun.spawn otherwise uses the environment from process start.
+        env: process.env,
       });
       this.reader = (
         this.process.stdout as ReadableStream<Uint8Array>

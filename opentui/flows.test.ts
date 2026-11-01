@@ -210,12 +210,15 @@ test("marked tasks share one menu and one confirmation listing them", async () =
   await openList(app);
   await app.keys(" ", " ");
   await app.frame("2 marked");
+  const section = async (name: string) => (await contents(file)).split("## ").find((part) => part.startsWith(name)) || "";
   await app.keys("RETURN");
   await app.frame("actions · 2 marked tasks");
   await app.keys("s");
+  await app.frame("start 2 tasks?");
   await app.frame("tasks: a1, b2");
+  expect(await section("Queued")).toContain("a1 - Alpha");
+  expect(await section("Queued")).toContain("b2 - Bravo");
   await app.keys("y");
-  const section = async (name: string) => (await contents(file)).split("## ").find((part) => part.startsWith(name)) || "";
   await until(app, async () => (await section("In flight")).includes("a1 - Alpha") && (await section("In flight")).includes("b2 - Bravo"));
   expect(await section("Queued")).toContain("c3 - Charlie");
 });

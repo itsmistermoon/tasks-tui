@@ -89,7 +89,7 @@ The menu lists only the actions that apply to the task's current state; archived
 
 Actions that cannot be undone, or that affect several tasks, open a dialog that asks the question (for example "delete task a1?"), warns what will be lost or affected, names the affected backlog and tasks, and shows every exact command; press `y` to run it or `n` to cancel. Any other key leaves the dialog open. There is no setting or shortcut that skips this confirmation.
 
-After start, mark done, reopen, hold, remove hold, block, or unblock, the summary in the status bar offers `z undo`, which runs the opposite command while the summary is visible. Undo is not offered after edits, moves, deletes, or backlog actions.
+After a single-task start, mark done, reopen, hold, remove hold, block, or unblock, the summary in the status bar offers `z undo`, which runs the opposite command while the summary is visible. Batch actions are confirmed and cannot be undone. Undo is not offered after edits, moves, deletes, or backlog actions.
 
 ### Several tasks
 

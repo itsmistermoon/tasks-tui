@@ -152,7 +152,9 @@ let actionTask: Task | null = null,
   actedKey = "",
   updatedAt: Date | null = null,
   lastRun: { command: string; result: ActionResult } | null = null,
-  logOpen = false;
+  logOpen = false,
+  logFocused = false,
+  commandScrollTop = 0;
 let helpPanel: HelpPanel = "browse";
 const text = (
   id: string,
@@ -1017,7 +1019,7 @@ function commandLog(run: { command: string; result: ActionResult }) {
   const lines = result.output.split("\n");
   const rows = (value: string) => Math.max(1, Math.ceil(Bun.stringWidth(value) / Math.max(1, renderer.width - 4)));
   const height = Math.max(5, Math.min(rows(run.command + " · exit 000") + lines.reduce((sum, row) => sum + rows(row), 0) + 4, Math.floor(renderer.height / 2)));
-  const panel = box("command-log", { border: true, borderStyle: "rounded", borderColor: result.ok ? inactiveBorder : RGBA.fromIndex(9), paddingLeft: 1, paddingRight: 1, height, flexShrink: 0 });
+  const panel = box("command-log", { border: true, borderStyle: "rounded", borderColor: logFocused ? activeBorder : result.ok ? inactiveBorder : RGBA.fromIndex(9), paddingLeft: 1, paddingRight: 1, height, flexShrink: 0 });
   const header = text("command-log-title", new StyledText([
     fg(result.ok ? colors.Done : RGBA.fromIndex(9))(result.ok ? icons.Done + " " : "✗ "),
     fg("#e0e0e4")(run.command),
@@ -1027,10 +1029,13 @@ function commandLog(run: { command: string; result: ActionResult }) {
   panel.add(header);
   // Colour tasks-axi's own lines without changing their text.
   const shade = (row: string) => /^(ok:|error:)/.test(row) ? (result.ok ? colors.Done : RGBA.fromIndex(9)) : /^code:/.test(row) ? "#858796" : /^help\[/.test(row) ? activeBorder : "#d8d8de";
-  const body = box("command-log-body", { flexGrow: 1, overflow: "hidden" });
+  const body = new ScrollBoxRenderable(renderer, { id: "command-log-body", flexGrow: 1, overflow: "hidden", scrollbarOptions });
   lines.forEach((row, i) => body.add(text("command-log-line-" + i, row, shade(row), { width: "100%", wrapMode: "char" })));
+  body.scrollTop = commandScrollTop;
   panel.add(body);
-  panel.add(keybindBar("command-log-hint", [...(!result.ok && actionChoice?.input ? ["e edit"] : []), ...(!result.ok ? ["↵ retry"] : []), "esc close"], { paddingRight: 0, justifyContent: "flex-start" }));
+  const bodyRows = lines.reduce((sum, row) => sum + rows(row), 0);
+  const canScroll = bodyRows > height - 4;
+  panel.add(keybindBar("command-log-hint", [...(canScroll ? ["j/k scroll"] : []), ...(!result.ok && logFocused && actionChoice?.input ? ["e edit"] : []), ...(!result.ok && logFocused ? ["↵ retry"] : []), "esc close"], { paddingRight: 0, justifyContent: "flex-start" }));
   return panel;
 }
 function openActions(task: Task) {
@@ -1079,7 +1084,7 @@ async function runAction() {
   lastRun = { command: formatCommand(args), result };
   // Successes stay in the status bar; failures open the command log with tasks-axi's guidance.
   actionResult = result.ok ? result : null;
-  if (!result.ok) logOpen = true;
+  if (!result.ok) { logOpen = true; logFocused = true; commandScrollTop = 0; }
   if (renderer.isDestroyed) return;
   // Read after the write even if a refresh started before it.
   await refreshing;
@@ -1205,16 +1210,36 @@ renderer.keyInput.on("keypress", (key) => {
     return;
   }
   if (logOpen && lastRun) {
-    if (key.name === "escape" || key.sequence === "q" || key.sequence === "L") {
+    if (key.name === "escape" || key.sequence === "q") {
       logOpen = false;
+      logFocused = false;
       render();
       return;
     }
-    if (!lastRun.result.ok && key.name === "return") {
+    if (key.sequence === "L") {
+      if (logFocused) { logOpen = false; logFocused = false; }
+      else logFocused = true;
+      render();
+      return;
+    }
+    if (logFocused && (key.name === "up" || key.name === "k")) {
+      if (commandScrollTop <= 0) logFocused = false;
+      else commandScrollTop = Math.max(0, commandScrollTop - 1);
+      render();
+      return;
+    }
+    if (logFocused && (key.name === "down" || key.name === "j")) {
+      commandScrollTop++;
+      render();
+      return;
+    }
+    if (logFocused && key.name === "pageup") { commandScrollTop = Math.max(0, commandScrollTop - 10); render(); return; }
+    if (logFocused && key.name === "pagedown") { commandScrollTop += 10; render(); return; }
+    if (logFocused && !lastRun.result.ok && key.name === "return") {
       runAction();
       return;
     }
-    if (!lastRun.result.ok && key.sequence === "e" && actionChoice?.input) {
+    if (logFocused && !lastRun.result.ok && key.sequence === "e" && actionChoice?.input) {
       key.preventDefault();
       logOpen = false;
       navigate({ type: "modal", modal: "input" });
@@ -1223,6 +1248,8 @@ renderer.keyInput.on("keypress", (key) => {
     }
   } else if (key.sequence === "L" && lastRun) {
     logOpen = true;
+    logFocused = true;
+    commandScrollTop = 0;
     render();
     return;
   }

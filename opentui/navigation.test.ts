@@ -149,3 +149,29 @@ test('restoring a rebuilt list reveals the task selected in the inspector', asyn
     expect(selected.y + selected.height).toBeLessThanOrEqual(sc.viewport.y + sc.viewport.height)
   } finally { await setup.dispose() }
 })
+
+test('chained action dialogs return to the panel that opened them', async () => {
+  const { transitionNavigation } = await import('./navigation')
+  let state = transitionNavigation({ selected: '', opened: null, inspectorMode: 'detail', inspecting: false, expanded: false, mode: 'detail', modalReturnMode: 'list', cardsFocused: false, cardIndex: 0 }, { type: 'modal', modal: 'actions' })
+  state = transitionNavigation(state, { type: 'modal', modal: 'input' })
+  state = transitionNavigation(state, { type: 'modal', modal: 'confirm' })
+  expect(state.mode).toBe('confirm')
+  expect(transitionNavigation(state, { type: 'dismiss' }).mode).toBe('detail')
+})
+
+test('a rebuilt scroll box restores its offset once it is laid out', async () => {
+  const { restoreScrollTop } = await import('./scrollbar')
+  const setup = await createTestRenderer({width:20,height:6})
+  try {
+    const sc = new ScrollBoxRenderable(setup.renderer,{id:'log',width:20,height:6})
+    setup.renderer.root.add(sc)
+    for(let i=0;i<12;i++)sc.add(new TextRenderable(setup.renderer,{id:`row-${i}`,content:`Row ${i}`,height:1}))
+    restoreScrollTop(sc, 4)
+    await setup.renderOnce()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(sc.scrollTop).toBe(4)
+    sc.scrollBy(-1)
+    await setup.renderOnce()
+    expect(sc.scrollTop).toBe(3)
+  } finally { await setup.dispose() }
+})

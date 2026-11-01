@@ -15,37 +15,44 @@ export function helpBindings(panel: HelpPanel, width: number): { title: string; 
     bindings = [["← → h l", "select status"], ["↓ j", "go to task list"], ["enter", "open selected status"]];
   } else if (panel === "list") {
     title = "backlog";
-    bindings = [...commonList, ["enter", "open inspector"], ["↑ k", "from first task, go to cards in Home"]];
+    bindings = [...commonList, ["enter", "task actions"], ["→ l", "open inspector"], ["↑ k", "from first task, go to cards in Home"]];
   } else {
     title = `inspector · ${panel}`;
     bindings = [["u i o", "detail / links / history"], ["pgup pgdn", "previous / next task"], ["↑ ↓ j k", panel === "links" ? "select link" : "scroll"]];
-    if (panel === "links") bindings.push(["enter", "open selected link"]);
+    bindings.push(["enter", panel === "links" ? "actions, including open link" : "task actions"]);
     if (width < 150) bindings.push(["e", "toggle inspector expansion"]);
     bindings.push(["↑ k", "from top, go to cards in Home"]);
   }
   return [{ title, bindings }, { title: "everywhere", bindings: [
     ["← → h l", "move between panels"], ["/", "filter current view"],
     ["d", "show or hide completed tasks"], ["a", "add a backlog source"],
-    ["r", "refresh or reload detail"], ["?", "open help"],
-    ["q ctrl+c", "quit"],
+    ["r", "refresh or reload detail"], ["L", "show, hide, or focus command output"], ["?", "open help"],
+    ["j k ↑ ↓ pgup pgdn", "scroll command output when focused"], ["esc", "close command output"],
+    ["enter / e", "retry / edit a failed command when focused"],
+    ["ctrl+s", "review multiline notes when editing"],
+    ["q", "quit when no dialog is open"], ["ctrl+c", "quit"],
   ] }];
 }
 
 export function helpContent(panel: HelpPanel, width: number): StyledText {
   const chunks = [];
   const sections = helpBindings(panel, width);
+  const keyWidth = Math.max(...sections.flatMap(({ bindings }) => bindings.map(([key]) => Bun.stringWidth(key)))) + 2;
+  const paddedKey = (key: string) => key + " ".repeat(keyWidth - Bun.stringWidth(key));
   sections.forEach(({ title, bindings }, index) => {
     if (index) chunks.push(fg("#d8d8de")("\n"));
     chunks.push(fg("#a99cfa")(bold(title + "\n")));
     for (const [key, action] of bindings)
-      chunks.push(fg("#86aaf5")(bold(key.padEnd(16))), fg("#d8d8de")(action + "\n"));
+      chunks.push(fg("#86aaf5")(bold(paddedKey(key))), fg("#d8d8de")(action + "\n"));
   });
   return new StyledText(chunks);
 }
 
 export function helpDimensions(panel: HelpPanel, terminalWidth: number, terminalHeight: number) {
   const sections = helpBindings(panel, terminalWidth);
-  const lines = sections.flatMap(({ title, bindings }, i) => [ ...(i ? [""] : []), title, ...bindings.map(([key, action]) => key.padEnd(16) + action) ]);
+  const keyWidth = Math.max(...sections.flatMap(({ bindings }) => bindings.map(([key]) => Bun.stringWidth(key)))) + 2;
+  const paddedKey = (key: string) => key + " ".repeat(keyWidth - Bun.stringWidth(key));
+  const lines = sections.flatMap(({ title, bindings }, i) => [ ...(i ? [""] : []), title, ...bindings.map(([key, action]) => paddedKey(key) + action) ]);
   lines.push("", "press any key to close");
   const desired = Math.max(...lines.map((line) => Bun.stringWidth(line)), 4) + 4;
   const width = Math.max(1, Math.min(terminalWidth - 2, desired));
@@ -58,13 +65,13 @@ export function helpDimensions(panel: HelpPanel, terminalWidth: number, terminal
 export function footerHints(panel: HelpPanel, width: number, filtering: boolean): string[] {
   if (width < 105) return ["? help", "q quit"];
   if (filtering) return ["enter apply", "esc clear"];
-  if (width < 150) return ["/ filter", "d show done", "a add source", "r refresh", "? help", "q quit"];
+  if (width < 150) return [...(["detail", "links", "history"].includes(panel) ? ["u/i/o tabs"] : []), "/ filter", "d show done", "a add source", "r refresh", "? help", "q quit"];
   const panelHints: Record<HelpPanel, string[]> = {
     browse: ["j/k choose", "enter open", "h/l move"],
     cards: ["h/l choose", "j list", "enter open"],
-    list: ["j/k choose", "enter inspect", "h/l move"],
-    detail: ["j/k scroll", "u/i/o tabs", "h back"],
-    links: ["j/k choose", "enter open", "u/i/o tabs", "h back"],
+    list: ["j/k choose", "enter actions", "h/l move"],
+    detail: ["j/k scroll", "enter actions", "u/i/o tabs", "h back"],
+    links: ["j/k choose", "enter actions", "u/i/o tabs", "h back"],
     history: ["j/k scroll", "u/i/o tabs", "h back"],
   };
   return [...panelHints[panel], "/ filter", "? help", "q quit"];

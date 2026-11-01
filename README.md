@@ -1,8 +1,8 @@
 # tasks-tui
 
-A read-only terminal viewer for [tasks-axi](https://github.com/kunchenguid/tasks-axi) backlogs, built with [OpenTUI](https://opentui.com/).
+A terminal viewer and manager for [tasks-axi](https://github.com/kunchenguid/tasks-axi) backlogs, built with [OpenTUI](https://opentui.com/).
 
-Browse work across backlogs, search task notes, and inspect the context behind a task without leaving the terminal. The Markdown files remain the source of truth; use `tasks-axi` when you want to change them.
+Browse work across backlogs, search task notes, inspect the context behind a task, and change it without leaving the terminal. The Markdown files remain the source of truth; every change is made by running `tasks-axi`.
 
 ## Why
 
@@ -59,12 +59,34 @@ When a backlog cannot be read, its error is printed to stderr and included in th
 
 ## Inspect a task
 
-Select a task and press `Enter` or move right to open the inspector. On a wide terminal it appears alongside the task list; on a narrow terminal it uses the available space. Switch between details, links, and archived note history without losing the selected task.
+Select a task and move right (`→` or `l`) to open the inspector. On a wide terminal it appears alongside the task list; on a narrow terminal it uses the available space. Switch between details, links, and archived note history without losing the selected task.
 
 - Press `Page Up` or `Page Down` to move to the previous or next task.
 - Press `e` to toggle inspector expansion on smaller terminals, or move left to return to the list.
 - With the inspector focused, press `u` for details, `i` for links and related tasks, or `o` for note history.
-- In Links, use the arrow keys to select an entry and `Enter` to open it. Web links open in your browser, local report paths open with your system's default application, and task dependencies open in the viewer.
+- In Links, use the arrow keys to select an entry and press `Enter`; the actions menu then starts with an option to open it. Web links open in your browser, local report paths open with your system's default application, and task dependencies open in the viewer.
+
+## Change a task
+
+Select a task in the list or inspector and press `Enter` to open its actions. Move with `j` / `k` and press `Enter`, or press the key shown beside an action. `Esc` closes the menu.
+
+| Key | Action | `tasks-axi` command | Confirmation |
+| --- | --- | --- | --- |
+| `s` | Start a queued task | `start <id>` | No |
+| `d` | Mark done, without archiving older done tasks | `done <id> --no-prune` | No |
+| `r` | Reopen a done or in-flight task | `reopen <id>` | No |
+| `h` | Hold with a reason, or remove the hold | `hold <id> --reason <text>` / `unhold <id>` | No |
+| `b` | Block by another task | `block <id> --by <other>` | No |
+| `u` | Remove a blocking task | `unblock <id> --by <other>` | No |
+| `t` | Edit the title | `update <id> --title <text>` | Yes |
+| `n` | Replace the notes, archiving the previous notes | `update <id> --body <text> --archive-body` | Yes |
+| `m` | Move to another backlog | `mv <id> --to <path>` | Yes |
+| `P` | Prune: move all but the most recent done tasks in the backlog to the archive | `prune --keep <n> --state done` | Yes |
+| `D` | Delete the task | `rm <id>` | Yes |
+
+The menu lists only the actions that apply to the task's current state; archived tasks have none. Actions that need a value, such as a hold reason, ask for it first. Replace notes opens a multiline editor with the current notes; press `Enter` to add a line, `Ctrl+S` to review the exact command, or `Esc` to cancel. Actions that cannot be undone, or that affect several tasks, open a dialog that asks the question (for example "delete task a1?"), warns what will be lost or affected, names the affected backlog, and shows the exact command; press `y` to run it or `n` to cancel. Any other key leaves the dialog open. There is no setting or shortcut that skips this confirmation.
+
+Each action runs `tasks-axi <command> --file <backlog>` against the task's own backlog, so locking, formatting, and validation remain the responsibility of `tasks-axi`; its exit code decides whether the action succeeded. A successful action shows the first line of the `tasks-axi` output as a `✔` summary in the status bar next to the breadcrumb; the next key press dismisses it. A failed action opens a command panel below the task panels with the command, its exit code, and the `tasks-axi` output exactly as it was printed, including its suggested next steps. The panel takes focus when it opens. Use `j`/`k`, arrows, or Page Up/Page Down to scroll; when at the top, another `k`/up returns focus to the task panels while keeping the output visible. `L` shows or hides the last output, or focuses it when visible without focus. With the panel focused, `e` edits the value you entered and `Enter` retries a failed command. `Esc` closes it. To the left of the key hints, `updated HH:MM` shows when the view last took in a change, including the result of each action. The view then reloads and keeps the task selected, even when the change moves it out of the current list, for example when done tasks are hidden. A deleted or moved task is no longer selected.
 
 ## Keyboard
 
@@ -74,16 +96,19 @@ Select a task and press `Enter` or move right to open the inspector. On a wide t
 | `←` / `→` or `h` / `l` | Move between panels and status cards |
 | `Home` / `End` | Go to the first or last item |
 | `Page Up` / `Page Down` | Move by page in a list; change task in the inspector or detail view |
-| `Enter` | Open a task, choose a browse option, or open a selected link |
+| `Enter` | Choose a browse option or status card, or open the actions for the selected task |
 | `u` / `i` / `o` | Select details, links, or note history when the inspector is focused |
 | `e` | Toggle inspector expansion on smaller terminals |
 | `/` | Filter the current view |
 | `d` | Show or hide completed and archived tasks |
 | `a` | Add a backlog file or directory |
 | `r` | Refresh sources or reload changed task details |
+| `L` | Show, hide, or focus the output of the last task action |
+| `j` / `k`, arrows, Page Up / Page Down | Scroll command output when its panel is focused |
 | `Esc` | Close a dialog, clear the filter, or return from status cards |
 | `?` | Open help |
-| `q` / `Ctrl+C` | Quit |
+| `q` | Quit when no dialog is open |
+| `Ctrl+C` | Quit |
 
 The interface adapts to the terminal width: the sidebar and inspector use separate panels when space allows.
 
@@ -97,11 +122,11 @@ The viewer can show a cached snapshot at startup while it refreshes sources in t
 
 Pruned tasks can be read from `done-archive.md` or the archive configured in `.tasks.toml`. Archived tasks appear in their own group. Older archive entries may not record their original state. Previous note versions are read from `note-archive.md` when available.
 
-## Read-only by design
+## What tasks-tui writes
 
-`tasks-tui` does not create, edit, or change the status of backlog tasks. It saves its own source and view preferences in the operating system's configuration directory. Opening a link delegates to the system's default application.
+`tasks-tui` changes backlogs only through the task actions above, and only by running `tasks-axi`; it never edits backlog files itself. It saves its own source and view preferences in the operating system's configuration directory. Opening a link delegates to the system's default application.
 
-The viewer currently reads through the installed `tasks-axi` package's Markdown parser and view modules. It therefore requires an installed version that provides those modules; see the [tasks-axi repository](https://github.com/kunchenguid/tasks-axi) for the underlying backlog format and CLI.
+Actions run the first `tasks-axi` found on `PATH`. The viewer reads through the installed `tasks-axi` package's Markdown parser and view modules. It therefore requires an installed version that provides those modules; see the [tasks-axi repository](https://github.com/kunchenguid/tasks-axi) for the underlying backlog format and CLI.
 
 ## Development
 
@@ -122,6 +147,6 @@ go vet ./...
 (cd opentui && bun test)
 ```
 
-The OpenTUI frontend lives in `opentui/`. The Go backend discovers sources, reads snapshots, serves archived note history, and provides task counts.
+Design decisions, such as how panels scroll, are recorded in `docs/adr/`. The OpenTUI frontend lives in `opentui/`. The Go backend discovers sources, reads snapshots, serves archived note history, and provides task counts.
 
 The release workflow builds all four archives and updates the Homebrew formula on `main` with their SHA-256 checksums using `GITHUB_TOKEN`. If `main` is protected, the update fails visibly and the formula must be updated through a pull request.

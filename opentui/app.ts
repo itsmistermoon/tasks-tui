@@ -1051,17 +1051,19 @@ function atPanelBottom(): boolean {
 function commandLog(run: { command: string; result: ActionResult }) {
   const { result } = run;
   const lines = result.output.split("\n");
-  const rows = (value: string) => Math.max(1, Math.ceil(Bun.stringWidth(value) / Math.max(1, renderer.width - 4)));
+  const rows = (value: string) => value.split("\n").reduce((count, line) => count + Math.max(1, Math.ceil(Bun.stringWidth(line) / Math.max(1, renderer.width - 4))), 0);
+  const headerPrefix = result.ok ? icons.Done + " " : "✗ ";
+  const headerSuffix = ` · exit ${result.code ?? "-"}`;
   // The command is part of the scrolled content so a long command cannot overflow the panel.
-  const contentRows = rows(run.command + " · exit 000") + lines.reduce((sum, row) => sum + rows(row), 0);
+  const contentRows = rows(headerPrefix + run.command + headerSuffix) + lines.reduce((sum, row) => sum + rows(row), 0);
   const height = Math.max(5, Math.min(contentRows + 3, Math.floor(renderer.height / 2)));
   commandMaxScroll = Math.max(0, contentRows - (height - 3));
   commandScrollTop = Math.min(commandScrollTop, commandMaxScroll);
   const panel = box("command-log", { border: true, borderStyle: "rounded", borderColor: logFocused ? activeBorder : result.ok ? inactiveBorder : RGBA.fromIndex(9), paddingLeft: 1, paddingRight: 1, height, flexShrink: 0, overflow: "hidden" });
   const header = text("command-log-title", new StyledText([
-    fg(result.ok ? colors.Done : RGBA.fromIndex(9))(result.ok ? icons.Done + " " : "✗ "),
+    fg(result.ok ? colors.Done : RGBA.fromIndex(9))(headerPrefix),
     fg("#e0e0e4")(run.command),
-    fg("#858796")(` · exit ${result.code ?? "-"}`),
+    fg("#858796")(headerSuffix),
   ]), RGBA.defaultForeground(), { width: "100%", wrapMode: "char", flexShrink: 0 });
   header.attributes = 1;
   // Colour tasks-axi's own lines without changing their text.

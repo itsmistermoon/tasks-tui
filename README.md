@@ -147,6 +147,6 @@ go vet ./...
 (cd opentui && bun test)
 ```
 
-The OpenTUI frontend lives in `opentui/`. The Go backend discovers sources, reads snapshots, serves archived note history, and provides task counts.
+Design decisions, such as how panels scroll, are recorded in `docs/adr/`. The OpenTUI frontend lives in `opentui/`. The Go backend discovers sources, reads snapshots, serves archived note history, and provides task counts.
 
 The release workflow builds all four archives and updates the Homebrew formula on `main` with their SHA-256 checksums using `GITHUB_TOKEN`. If `main` is protected, the update fails visibly and the formula must be updated through a pull request.

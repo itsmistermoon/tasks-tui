@@ -28,7 +28,7 @@ import {
   type NavigationState,
 } from "./navigation";
 import { projectView, type BrowseItem } from "./views";
-import { scrollbarOptions, hideScrollbars } from "./scrollbar";
+import { scrollbarOptions, hideScrollbars, restoreScrollTop } from "./scrollbar";
 import { openLink } from "./links";
 import { matchesDependency } from "./dependencies";
 import { truncateText } from "./truncate";
@@ -156,7 +156,8 @@ let actionTask: Task | null = null,
   logOpen = false,
   logFocused = false,
   commandMaxScroll = 0,
-  commandScrollTop = 0;
+  commandScrollTop = 0,
+  commandBody: ScrollBoxRenderable | null = null;
 let helpPanel: HelpPanel = "browse";
 const text = (
   id: string,
@@ -1072,10 +1073,8 @@ function commandLog(run: { command: string; result: ActionResult }) {
   body.add(header);
   lines.forEach((row, i) => body.add(text("command-log-line-" + i, row, shade(row), { width: "100%", wrapMode: "char" })));
   // Apply the offset once the content has been laid out; before that the scroll range is empty.
-  const offset = commandScrollTop;
-  setTimeout(() => {
-    if (!body.isDestroyed) body.scrollTop = offset;
-  }, 0);
+  restoreScrollTop(body, commandScrollTop);
+  commandBody = body;
   panel.add(body);
   const canScroll = commandMaxScroll > 0;
   panel.add(keybindBar("command-log-hint", [...(canScroll ? ["j/k scroll"] : []), ...(!result.ok && logFocused && actionChoice?.input ? ["e edit"] : []), ...(!result.ok && logFocused ? ["↵ retry"] : []), "esc close"], { paddingRight: 0, justifyContent: "flex-start" }));
@@ -1276,19 +1275,22 @@ renderer.keyInput.on("keypress", (key) => {
       render();
       return;
     }
+    // Scroll the existing panel in place; rebuilding it on every key makes it flicker.
+    const scrollCommand = (delta: number) => {
+      if (!commandBody || commandBody.isDestroyed) return;
+      commandBody.scrollBy(delta);
+      commandScrollTop = commandBody.scrollTop;
+    };
     if (logFocused && (key.name === "up" || key.name === "k")) {
-      if (commandScrollTop <= 0) logFocused = false;
-      else commandScrollTop = Math.max(0, commandScrollTop - 1);
-      render();
+      if ((commandBody?.scrollTop ?? commandScrollTop) <= 0) {
+        logFocused = false;
+        render();
+      } else scrollCommand(-1);
       return;
     }
-    if (logFocused && (key.name === "down" || key.name === "j")) {
-      commandScrollTop = Math.min(commandMaxScroll, commandScrollTop + 1);
-      render();
-      return;
-    }
-    if (logFocused && key.name === "pageup") { commandScrollTop = Math.max(0, commandScrollTop - 10); render(); return; }
-    if (logFocused && key.name === "pagedown") { commandScrollTop = Math.min(commandMaxScroll, commandScrollTop + 10); render(); return; }
+    if (logFocused && (key.name === "down" || key.name === "j")) { scrollCommand(1); return; }
+    if (logFocused && key.name === "pageup") { scrollCommand(-10); return; }
+    if (logFocused && key.name === "pagedown") { scrollCommand(10); return; }
     if (logFocused && !lastRun.result.ok && key.name === "return") {
       runAction();
       return;

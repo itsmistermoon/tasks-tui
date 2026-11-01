@@ -158,3 +158,20 @@ test('chained action dialogs return to the panel that opened them', async () => 
   expect(state.mode).toBe('confirm')
   expect(transitionNavigation(state, { type: 'dismiss' }).mode).toBe('detail')
 })
+
+test('a rebuilt scroll box restores its offset once it is laid out', async () => {
+  const { restoreScrollTop } = await import('./scrollbar')
+  const setup = await createTestRenderer({width:20,height:6})
+  try {
+    const sc = new ScrollBoxRenderable(setup.renderer,{id:'log',width:20,height:6})
+    setup.renderer.root.add(sc)
+    for(let i=0;i<12;i++)sc.add(new TextRenderable(setup.renderer,{id:`row-${i}`,content:`Row ${i}`,height:1}))
+    restoreScrollTop(sc, 4)
+    await setup.renderOnce()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(sc.scrollTop).toBe(4)
+    sc.scrollBy(-1)
+    await setup.renderOnce()
+    expect(sc.scrollTop).toBe(3)
+  } finally { await setup.dispose() }
+})

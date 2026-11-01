@@ -1108,7 +1108,8 @@ async function runAction() {
   lastRun = { command: formatCommand(args), result };
   // Successes stay in the status bar; failures open the command log with tasks-axi's guidance.
   actionResult = result.ok ? result : null;
-  if (!result.ok) { logOpen = true; logFocused = true; commandScrollTop = 0; }
+  if (result.ok) { logOpen = false; logFocused = false; }
+  else { logOpen = true; logFocused = true; commandScrollTop = 0; }
   if (renderer.isDestroyed) return;
   // Read after the write even if a refresh started before it.
   await refreshing;

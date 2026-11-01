@@ -29,6 +29,7 @@ export function helpBindings(panel: HelpPanel, width: number): { title: string; 
     ["r", "refresh or reload detail"], ["L", "show, hide, or focus command output"], ["?", "open help"],
     ["j k ↑ ↓ pgup pgdn", "scroll command output when focused"], ["esc / q", "close command output"],
     ["enter / e", "retry / edit a failed command when focused"],
+    ["ctrl+s", "review multiline notes when editing"],
     ["q ctrl+c", "quit"],
   ] }];
 }
@@ -36,18 +37,22 @@ export function helpBindings(panel: HelpPanel, width: number): { title: string; 
 export function helpContent(panel: HelpPanel, width: number): StyledText {
   const chunks = [];
   const sections = helpBindings(panel, width);
+  const keyWidth = Math.max(...sections.flatMap(({ bindings }) => bindings.map(([key]) => Bun.stringWidth(key)))) + 2;
+  const paddedKey = (key: string) => key + " ".repeat(keyWidth - Bun.stringWidth(key));
   sections.forEach(({ title, bindings }, index) => {
     if (index) chunks.push(fg("#d8d8de")("\n"));
     chunks.push(fg("#a99cfa")(bold(title + "\n")));
     for (const [key, action] of bindings)
-      chunks.push(fg("#86aaf5")(bold(key.padEnd(16))), fg("#d8d8de")(action + "\n"));
+      chunks.push(fg("#86aaf5")(bold(paddedKey(key))), fg("#d8d8de")(action + "\n"));
   });
   return new StyledText(chunks);
 }
 
 export function helpDimensions(panel: HelpPanel, terminalWidth: number, terminalHeight: number) {
   const sections = helpBindings(panel, terminalWidth);
-  const lines = sections.flatMap(({ title, bindings }, i) => [ ...(i ? [""] : []), title, ...bindings.map(([key, action]) => key.padEnd(16) + action) ]);
+  const keyWidth = Math.max(...sections.flatMap(({ bindings }) => bindings.map(([key]) => Bun.stringWidth(key)))) + 2;
+  const paddedKey = (key: string) => key + " ".repeat(keyWidth - Bun.stringWidth(key));
+  const lines = sections.flatMap(({ title, bindings }, i) => [ ...(i ? [""] : []), title, ...bindings.map(([key, action]) => paddedKey(key) + action) ]);
   lines.push("", "press any key to close");
   const desired = Math.max(...lines.map((line) => Bun.stringWidth(line)), 4) + 4;
   const width = Math.max(1, Math.min(terminalWidth - 2, desired));

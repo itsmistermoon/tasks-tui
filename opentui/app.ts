@@ -3,6 +3,7 @@ import {
   BoxRenderable,
   TextRenderable,
   InputRenderable,
+  TextareaRenderable,
   ScrollBoxRenderable,
   RGBA,
   StyledText,
@@ -290,7 +291,9 @@ function render(underlay = false) {
         ? modalSize(actionsWidth(), actionMenu.length + 6)
         : overlayMode === "confirm"
           ? modalSize(76, Math.ceil(Bun.stringWidth(command) / 70) + Math.ceil(Bun.stringWidth(actionChoice?.warning || "") / 70) + 9)
-          : modalSize(64, 9);
+          : overlayMode === "input" && actionChoice?.key === "n"
+            ? modalSize(76, Math.max(12, Math.min(26, String(actionChoice.input?.initial || "").split("\n").length + 8)))
+            : modalSize(64, 9);
     const { width, height } = size;
     const p = box("modal", {
       position: "absolute",
@@ -354,26 +357,40 @@ function render(underlay = false) {
       p.add(keybindBar("actions-hint", ["j/k choose", "↵ run", "esc close"], { paddingRight: 0 }));
     } else if (overlayMode === "input") {
       p.add(line("action-input-label", actionChoice?.input?.label || "", "#b8bac5"));
-      const field = new InputRenderable(renderer, {
-        id: "action-input",
-        width: "100%",
-        value: actionValue,
-        backgroundColor: "transparent",
-        focusedBackgroundColor: "transparent",
-      });
+      const isNotesEditor = actionChoice?.key === "n";
+      const field = isNotesEditor
+        ? new TextareaRenderable(renderer, {
+            id: "notes-editor",
+            width: "100%",
+            flexGrow: 1,
+            minHeight: 3,
+            initialValue: actionValue,
+            wrapMode: "word",
+            backgroundColor: "transparent",
+            focusedBackgroundColor: "transparent",
+          })
+        : new InputRenderable(renderer, {
+            id: "action-input",
+            width: "100%",
+            value: actionValue,
+            backgroundColor: "transparent",
+            focusedBackgroundColor: "transparent",
+          });
       p.add(field);
-      field.on("input", (value: string) => {
-        actionValue = value;
-      });
-      field.on("enter", () => {
-        if (actionChoice?.confirm) {
-          navigate({ type: "modal", modal: "confirm" });
-          render();
-        } else runAction();
-      });
+      if (!isNotesEditor) {
+        field.on("input", (value: string) => {
+          actionValue = value;
+        });
+        field.on("enter", () => {
+          if (actionChoice?.confirm) {
+            navigate({ type: "modal", modal: "confirm" });
+            render();
+          } else runAction();
+        });
+      }
       field.focus();
-      p.add(box("action-input-spacer", { flexGrow: 1, minHeight: 1 }));
-      p.add(keybindBar("action-input-hint", [actionChoice?.confirm ? "↵ review" : "↵ run", "esc cancel"], { paddingRight: 0 }));
+      if (!isNotesEditor) p.add(box("action-input-spacer", { flexGrow: 1, minHeight: 1 }));
+      p.add(keybindBar("action-input-hint", [isNotesEditor ? "ctrl+s review" : actionChoice?.confirm ? "↵ review" : "↵ run", "esc cancel"], { paddingRight: 0 }));
     } else if (overlayMode === "confirm") {
       p.add(text("confirm-warning", actionChoice?.warning || "", RGBA.fromIndex(9), { width: "100%" }));
       p.add(text("confirm-backlog", new StyledText([fg("#d8d8de")("backlog: "), fg("#86aaf5")(actionTask ? sourceName(actionTask.Source) : "")]), RGBA.defaultForeground(), { width: "100%" }));
@@ -1202,6 +1219,16 @@ renderer.keyInput.on("keypress", (key) => {
     return;
   }
   if (navigation.mode === "add" || navigation.mode === "input") {
+    if (navigation.mode === "input" && actionChoice?.key === "n" && key.ctrl && key.sequence === "s") {
+      const editor = renderer.root.findDescendantById("notes-editor");
+      if (editor instanceof TextareaRenderable) {
+        actionValue = editor.plainText;
+        key.preventDefault();
+        navigate({ type: "modal", modal: "confirm" });
+        render();
+      }
+      return;
+    }
     if (key.name === "escape") {
       navigate({ type: "dismiss" });
       addPath = "";

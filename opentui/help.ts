@@ -27,10 +27,10 @@ export function helpBindings(panel: HelpPanel, width: number): { title: string; 
     ["← → h l", "move between panels"], ["/", "filter current view"],
     ["d", "show or hide completed tasks"], ["a", "add a backlog source"],
     ["r", "refresh or reload detail"], ["L", "show, hide, or focus command output"], ["?", "open help"],
-    ["j k ↑ ↓ pgup pgdn", "scroll command output when focused"], ["esc / q", "close command output"],
+    ["j k ↑ ↓ pgup pgdn", "scroll command output when focused"], ["esc", "close command output"],
     ["enter / e", "retry / edit a failed command when focused"],
     ["ctrl+s", "review multiline notes when editing"],
-    ["q ctrl+c", "quit"],
+    ["q", "quit when no dialog is open"], ["ctrl+c", "quit"],
   ] }];
 }
 

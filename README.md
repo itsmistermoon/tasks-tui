@@ -68,7 +68,7 @@ Select a task and move right (`→` or `l`) to open the inspector. On a wide ter
 
 ## Change a task
 
-Select a task in the list or inspector and press `Enter` to open its actions. Move with `j` / `k` and press `Enter`, or press the key shown beside an action. `Esc` or `q` closes the menu.
+Select a task in the list or inspector and press `Enter` to open its actions. Move with `j` / `k` and press `Enter`, or press the key shown beside an action. `Esc` closes the menu.
 
 | Key | Action | `tasks-axi` command | Confirmation |
 | --- | --- | --- | --- |
@@ -84,9 +84,9 @@ Select a task in the list or inspector and press `Enter` to open its actions. Mo
 | `P` | Prune: move all but the most recent done tasks in the backlog to the archive | `prune --keep <n> --state done` | Yes |
 | `D` | Delete the task | `rm <id>` | Yes |
 
-The menu lists only the actions that apply to the task's current state; archived tasks have none. Actions that need a value, such as a hold reason, ask for it first. Replace notes opens a multiline editor with the current notes; press `Enter` to add a line, `Ctrl+S` to review the exact command, or `Esc` to cancel. Actions that cannot be undone, or that affect several tasks, open a dialog that asks the question (for example "delete task a1?"), warns what will be lost or affected, names the affected backlog, and shows the exact command; press `y` to run it or `n`, `q`, or `Esc` to cancel. Any other key leaves the dialog open. There is no setting or shortcut that skips this confirmation.
+The menu lists only the actions that apply to the task's current state; archived tasks have none. Actions that need a value, such as a hold reason, ask for it first. Replace notes opens a multiline editor with the current notes; press `Enter` to add a line, `Ctrl+S` to review the exact command, or `Esc` to cancel. Actions that cannot be undone, or that affect several tasks, open a dialog that asks the question (for example "delete task a1?"), warns what will be lost or affected, names the affected backlog, and shows the exact command; press `y` to run it or `n` to cancel. Any other key leaves the dialog open. There is no setting or shortcut that skips this confirmation.
 
-Each action runs `tasks-axi <command> --file <backlog>` against the task's own backlog, so locking, formatting, and validation remain the responsibility of `tasks-axi`; its exit code decides whether the action succeeded. A successful action shows the first line of the `tasks-axi` output as a `✔` summary in the status bar next to the breadcrumb; the next key press dismisses it. A failed action opens a command panel below the task panels with the command, its exit code, and the `tasks-axi` output exactly as it was printed, including its suggested next steps. The panel takes focus when it opens. Use `j`/`k`, arrows, or Page Up/Page Down to scroll; when at the top, another `k`/up returns focus to the task panels while keeping the output visible. `L` shows or hides the last output, or focuses it when visible without focus. With the panel focused, `e` edits the value you entered and `Enter` retries a failed command. `Esc` or `q` closes it. To the left of the key hints, `updated HH:MM` shows when the view last took in a change, including the result of each action. The view then reloads and keeps the task selected, even when the change moves it out of the current list, for example when done tasks are hidden. A deleted or moved task is no longer selected.
+Each action runs `tasks-axi <command> --file <backlog>` against the task's own backlog, so locking, formatting, and validation remain the responsibility of `tasks-axi`; its exit code decides whether the action succeeded. A successful action shows the first line of the `tasks-axi` output as a `✔` summary in the status bar next to the breadcrumb; the next key press dismisses it. A failed action opens a command panel below the task panels with the command, its exit code, and the `tasks-axi` output exactly as it was printed, including its suggested next steps. The panel takes focus when it opens. Use `j`/`k`, arrows, or Page Up/Page Down to scroll; when at the top, another `k`/up returns focus to the task panels while keeping the output visible. `L` shows or hides the last output, or focuses it when visible without focus. With the panel focused, `e` edits the value you entered and `Enter` retries a failed command. `Esc` closes it. To the left of the key hints, `updated HH:MM` shows when the view last took in a change, including the result of each action. The view then reloads and keeps the task selected, even when the change moves it out of the current list, for example when done tasks are hidden. A deleted or moved task is no longer selected.
 
 ## Keyboard
 
@@ -105,9 +105,9 @@ Each action runs `tasks-axi <command> --file <backlog>` against the task's own b
 | `r` | Refresh sources or reload changed task details |
 | `L` | Show, hide, or focus the output of the last task action |
 | `j` / `k`, arrows, Page Up / Page Down | Scroll command output when its panel is focused |
-| `Esc` | Close a dialog (`q` also closes the actions menu and confirmations), clear the filter, or return from status cards |
+| `Esc` | Close a dialog, clear the filter, or return from status cards |
 | `?` | Open help |
-| `q` | Close the actions menu or command output; otherwise quit |
+| `q` | Quit when no dialog is open |
 | `Ctrl+C` | Quit |
 
 The interface adapts to the terminal width: the sidebar and inspector use separate panels when space allows.

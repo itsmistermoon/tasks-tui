@@ -1239,7 +1239,7 @@ renderer.keyInput.on("keypress", (key) => {
   }
   if (navigation.mode === "actions") {
     const name = ({ j: "down", k: "up" } as Record<string, string>)[key.sequence] || key.name;
-    if (name === "escape" || key.sequence === "q") {
+    if (name === "escape") {
       navigate({ type: "dismiss" });
       render();
     } else if (name === "up" || name === "down") {
@@ -1256,14 +1256,14 @@ renderer.keyInput.on("keypress", (key) => {
   }
   if (navigation.mode === "confirm") {
     if (key.name === "y") runAction();
-    else if (key.name === "n" || key.name === "q" || key.name === "escape") {
+    else if (key.name === "n" || key.name === "escape") {
       navigate({ type: "dismiss" });
       render();
     }
     return;
   }
   if (logOpen && lastRun) {
-    if (key.name === "escape" || key.sequence === "q") {
+    if (key.name === "escape") {
       logOpen = false;
       logFocused = false;
       render();

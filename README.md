@@ -131,10 +131,9 @@ Each action runs `tasks-axi <command> --file <backlog>` against the task's own b
 | `r` | Refresh sources or reload changed task details |
 | `L` | Show, hide, or focus the output of the last task action |
 | `j` / `k`, arrows, Page Up / Page Down | Scroll command output when its panel is focused |
-| `Esc` | Close a dialog, clear the filter or marks, dismiss a notice, or return from status cards |
+| `Esc` | Close a dialog or cancel a form, clear the filter or marks, dismiss a notice, or return from status cards |
 | `?` | Open help, or explain the action in an action dialog |
 | `q` | Close an action menu, confirmation, or command panel, otherwise quit |
-| `Esc` | Close a dialog or cancel an action form |
 | `Ctrl+C` | Quit |
 
 The interface adapts to the terminal width: the sidebar and inspector use separate panels when space allows.

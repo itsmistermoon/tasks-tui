@@ -181,4 +181,4 @@ The release workflow builds all four archives and updates the Homebrew formula o
 
 ## License
 
-MIT, ver [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
